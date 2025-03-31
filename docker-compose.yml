@@ -1,0 +1,8 @@
+version: "3.9"
+
+services:
+  fip-bot:
+    build: .
+    container_name: fip-bot
+    restart: unless-stopped
+    env_file: .env
