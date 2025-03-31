@@ -1,14 +1,18 @@
 import os
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 from dotenv import load_dotenv
 import aiohttp
+import urllib.parse
 
 # Load environment variables
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ENCODING = os.getenv("ENCODING", "mp3")
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
+SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI")
+SPOTIFY_AUTH_SERVER = os.getenv("SPOTIFY_AUTH_SERVER", "http://localhost:8080")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -18,7 +22,6 @@ intents.voice_states = True
 bot = commands.Bot(command_prefix='/', intents=intents)
 player = None
 
-# Map of genre to stream URLs and metadata API keys
 FIP_STREAMS = {
     "main": {"url": os.getenv("FIP_MAIN"), "metadata": "fip"},
     "rock": {"url": os.getenv("FIP_ROCK"), "metadata": "fip_rock"},
@@ -33,8 +36,57 @@ FIP_STREAMS = {
     "metal": {"url": os.getenv("FIP_METAL"), "metadata": "fip_metal"},
 }
 
-# Track current station per guild
 guild_station_map = {}
+live_messages = {}
+station_cache = {}
+guild_song_ids = {}
+current_genres = set()
+
+@tasks.loop(seconds=5)
+async def update_station_cache():
+    async with aiohttp.ClientSession() as session:
+        for genre in current_genres:
+            meta = FIP_STREAMS.get(genre)
+            if not meta:
+                continue
+            try:
+                url = f"https://fip-metadata.fly.dev/api/metadata/{meta['metadata']}"
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        result = await resp.json()
+                        station_cache[genre] = result
+
+                        now = result.get("now", {})
+                        title = now.get("firstLine", {}).get("title")
+                        artist = now.get("secondLine", {}).get("title")
+
+                        if title and artist:
+                            print(f"[Cache Updated] {genre}: {title} - {artist}")
+                        else:
+                            print(f"[Cache Updated] {genre}: Metadata incomplete")
+            except Exception as e:
+                print(f"Failed to fetch metadata for {genre}: {e}")
+
+@tasks.loop(seconds=1)
+async def update_song_embeds():
+    for guild_id, message in live_messages.items():
+        genre = guild_station_map.get(guild_id)
+        data = station_cache.get(genre)
+        if not data:
+            continue
+
+        song_id = data.get("now", {}).get("song", {}).get("id")
+
+        if not song_id or guild_song_ids.get(guild_id) == song_id:
+            continue
+
+        embed = await fetch_metadata_embed(guild_id)
+        if embed:
+            try:
+                await message.edit(embed=embed, view=FIPControlView())
+                guild_song_ids[guild_id] = song_id
+            except Exception as e:
+                print(f"Failed to update message for guild {guild_id}: {e}")
 
 async def switch_station(interaction: discord.Interaction, genre: str):
     global player
@@ -48,6 +100,9 @@ async def switch_station(interaction: discord.Interaction, genre: str):
         await interaction.response.send_message("You're not in a voice channel!", ephemeral=True)
         return
 
+    current_genres.clear()
+    current_genres.add(genre)
+
     channel = interaction.user.voice.channel
     stream_url = FIP_STREAMS[genre]["url"]
     guild_id = interaction.guild.id
@@ -59,10 +114,17 @@ async def switch_station(interaction: discord.Interaction, genre: str):
             await vc.move_to(channel)
         if vc.is_playing():
             vc.stop()
-        audio = discord.FFmpegPCMAudio(stream_url)
-        vc.play(audio)
+        try:
+            audio = discord.FFmpegPCMAudio(stream_url)
+            vc.play(audio)
+        except Exception as e:
+            print(f"[Error] Failed to play new stream: {e}")
+            await interaction.response.send_message("Failed to play the new station stream.", ephemeral=True)
+            return
         embed = await fetch_metadata_embed(guild_id)
         await interaction.response.send_message(content=f"🔄 Switched to FIP {genre} in {channel.name}", embed=embed, view=FIPControlView())
+        message = await interaction.original_response()
+        live_messages[guild_id] = message
         return
 
     try:
@@ -71,6 +133,8 @@ async def switch_station(interaction: discord.Interaction, genre: str):
         player.play(audio)
         embed = await fetch_metadata_embed(guild_id)
         await interaction.response.send_message(content=f"🎶 Now playing FIP {genre} in {channel.name}", embed=embed, view=FIPControlView())
+        message = await interaction.original_response()
+        live_messages[guild_id] = message
     except Exception as e:
         print(f"Error: {e}")
         await interaction.response.send_message("Something went wrong.", ephemeral=True)
@@ -121,20 +185,45 @@ class FIPControlView(discord.ui.View):
             vc.source = discord.PCMVolumeTransformer(vc.source, volume=max(0.1, volume - 0.1))
             await interaction.response.send_message("🔉 Volume decreased.", ephemeral=True)
 
+    @discord.ui.button(label="Like on Spotify", style=discord.ButtonStyle.success)
+    async def like_spotify(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = str(interaction.user.id)
+        token_check_url = f"{SPOTIFY_AUTH_SERVER}/token/{user_id}"
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(token_check_url) as resp:
+                    if resp.status == 404:
+                        raise ValueError("Not authorized")
+                    await interaction.response.send_message("✅ Liked the current song on Spotify!", ephemeral=True)
+        except Exception:
+            params = {
+                "client_id": SPOTIFY_CLIENT_ID,
+                "response_type": "code",
+                "redirect_uri": SPOTIFY_REDIRECT_URI,
+                "scope": "user-library-modify",
+                "state": user_id
+            }
+            query = urllib.parse.urlencode(params)
+            url = f"https://accounts.spotify.com/authorize?{query}"
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(label="Authorize Spotify", url=url))
+            await interaction.response.send_message("Please authorize Spotify:", view=view, ephemeral=True)
+
 async def fetch_metadata_embed(guild_id):
     genre = guild_station_map.get(guild_id, "main")
-    metadata_url = f"https://fip-metadata.fly.dev/api/metadata/{FIP_STREAMS[genre]['metadata']}"
+    data = station_cache.get(genre)
+
+    if not data:
+        return None
+
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(metadata_url) as resp:
-                data = await resp.json()
+        song = data.get("now", {}).get("song")
+        visuals = data.get("now", {}).get("visuals", {}).get("card")
+        first_line = data.get("now", {}).get("firstLine", {}).get("title") or ""
+        second_line = data.get("now", {}).get("secondLine", {}).get("title") or ""
 
-        song = data["now"].get("song")
-        visuals = data["now"]["visuals"]["card"]
-        first_line = data["now"]["firstLine"]["title"] or ""
-        second_line = data["now"]["secondLine"]["title"] or ""
-
-        if song is None:
+        if not song:
             return None
 
         embed = discord.Embed(
@@ -142,11 +231,12 @@ async def fetch_metadata_embed(guild_id):
             description=f"*{song['release']['title']}* ({song['year']})",
             color=discord.Color.purple()
         )
-        embed.set_thumbnail(url=visuals["src"])
+        if visuals and visuals.get("src"):
+            embed.set_thumbnail(url=visuals["src"])
         embed.set_footer(text=f"Label: {song['release']['label']} • Station: {data['stationName'].upper()}")
         return embed
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error building embed: {e}")
         return None
 
 @bot.tree.command(name="fip_join", description="Join your voice channel and play FIP Radio")
@@ -163,6 +253,19 @@ async def fip_info(interaction: discord.Interaction):
     else:
         await interaction.followup.send("Couldn't fetch song info.", ephemeral=True)
 
+@bot.tree.command(name="fip_leave", description="Leave the voice channel")
+async def fip_leave(interaction: discord.Interaction):
+    global player
+    vc = interaction.guild.voice_client
+    if vc:
+        await vc.disconnect()
+        player = None
+        guild_station_map.pop(interaction.guild.id, None)
+        live_messages.pop(interaction.guild.id, None)
+        await interaction.response.send_message("Left the voice channel.")
+    else:
+        await interaction.response.send_message("I'm not connected to a voice channel.", ephemeral=True)
+
 @bot.event
 async def on_ready():
     try:
@@ -172,5 +275,7 @@ async def on_ready():
         print(f"❌ Sync error: {e}")
     print(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
     print("------")
+    update_station_cache.start()
+    update_song_embeds.start()
 
 bot.run(BOT_TOKEN)
