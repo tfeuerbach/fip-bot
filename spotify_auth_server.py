@@ -1,13 +1,12 @@
 from flask import Flask, request, redirect
 import requests
 import os
-import json
 from dotenv import load_dotenv
+from db_utils import store_tokens, get_tokens
 
 load_dotenv()
 
 app = Flask(__name__)
-user_tokens = {}  # This should be a database in production
 
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
@@ -26,10 +25,17 @@ def login():
 
 @app.route("/token/<user_id>")
 def get_token(user_id):
-    token_data = user_tokens.get(user_id)
-    if not token_data:
-        return {"authorized": False}, 404
-    return {"authorized": True, "access_token": token_data["access_token"]}
+    try:
+        tokens = get_tokens(user_id)
+        if not tokens:
+            return {"authorized": False}, 404
+        return {
+            "authorized": True,
+            "access_token": tokens["access_token"]
+        }
+    except Exception as e:
+        print(f"[Auth Server Error] /token/{user_id} - {e}")
+        return {"error": str(e)}, 500
 
 @app.route("/callback")
 def callback():
@@ -48,16 +54,12 @@ def callback():
     response = requests.post(token_url, data=payload)
     data = response.json()
 
-    user_tokens[state] = {
-        "access_token": data["access_token"],
-        "refresh_token": data["refresh_token"],
-    }
+    if "access_token" not in data or "refresh_token" not in data:
+        return "❌ Spotify authorization failed."
+
+    store_tokens(state, data["access_token"], data["refresh_token"], data.get("expires_in", 3600))
 
     return "✅ You can now like songs in Discord!"
 
-def get_access_token(discord_id):
-    return user_tokens.get(str(discord_id), {}).get("access_token")
-
-# Run this file alongside your bot
 if __name__ == "__main__":
-    app.run(port=8080)
+    app.run(host="0.0.0.0", port=8080)
