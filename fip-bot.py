@@ -1,8 +1,10 @@
 import os
+import time
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 from dotenv import load_dotenv
+from datetime import datetime
 import aiohttp
 import urllib.parse
 
@@ -41,14 +43,21 @@ live_messages = {}
 station_cache = {}
 guild_song_ids = {}
 current_genres = set()
+next_update_times = {}  # genre: timestamp
+last_song_ids = {}  # genre: song_id
 
-@tasks.loop(seconds=5)
+@tasks.loop(seconds=1)
 async def update_station_cache():
+    now = int(time.time())
     async with aiohttp.ClientSession() as session:
         for genre in current_genres:
+            if genre in next_update_times and now < next_update_times[genre]:
+                continue
+
             meta = FIP_STREAMS.get(genre)
             if not meta:
                 continue
+
             try:
                 url = f"https://fip-metadata.fly.dev/api/metadata/{meta['metadata']}"
                 async with session.get(url) as resp:
@@ -56,26 +65,41 @@ async def update_station_cache():
                         result = await resp.json()
                         station_cache[genre] = result
 
-                        now = result.get("now", {})
-                        title = now.get("firstLine", {}).get("title")
-                        artist = now.get("secondLine", {}).get("title")
+                        now_block = result.get("now", {})
+                        title = now_block.get("firstLine", {}).get("title")
+                        artist = now_block.get("secondLine", {}).get("title")
+                        start = now_block.get("startTime")
+                        end = now_block.get("endTime")
+
+                        song = now_block.get("song", {})
+                        song_id = song.get("id")
+
+                        if song_id and last_song_ids.get(genre) == song_id:
+                            continue  # No change in song, skip update
 
                         if title and artist:
-                            print(f"[Cache Updated] {genre}: {title} - {artist}")
+                            print(f"[Cache Updated] {genre}: {title} - {artist} (Start Time: {datetime.fromtimestamp(start).strftime('%H:%M:%S')} - End Time: {datetime.fromtimestamp(end).strftime('%H:%M:%S')})")
                         else:
                             print(f"[Cache Updated] {genre}: Metadata incomplete")
+
+                        last_song_ids[genre] = song_id
+
+                        if start and end:
+                            next_update_times[genre] = end + 1
             except Exception as e:
                 print(f"Failed to fetch metadata for {genre}: {e}")
 
 @tasks.loop(seconds=1)
 async def update_song_embeds():
-    for guild_id, message in live_messages.items():
+    for guild_id, message in list(live_messages.items()):
         genre = guild_station_map.get(guild_id)
         data = station_cache.get(genre)
-        if not data:
+
+        if not data or "now" not in data:
             continue
 
-        song_id = data.get("now", {}).get("song", {}).get("id")
+        song_data = data.get("now", {}).get("song")
+        song_id = song_data.get("id") if song_data else None
 
         if not song_id or guild_song_ids.get(guild_id) == song_id:
             continue
@@ -85,8 +109,12 @@ async def update_song_embeds():
             try:
                 await message.edit(embed=embed, view=FIPControlView())
                 guild_song_ids[guild_id] = song_id
-            except Exception as e:
-                print(f"Failed to update message for guild {guild_id}: {e}")
+            except discord.HTTPException as e:
+                if e.code == 50027:
+                    print(f"[Warning] Removing stale message for guild {guild_id}")
+                    live_messages.pop(guild_id, None)
+                else:
+                    print(f"Failed to update message for guild {guild_id}: {e}")
 
 async def switch_station(interaction: discord.Interaction, genre: str):
     global player
@@ -190,13 +218,45 @@ class FIPControlView(discord.ui.View):
         user_id = str(interaction.user.id)
         token_check_url = f"{SPOTIFY_AUTH_SERVER}/token/{user_id}"
 
+        genre = guild_station_map.get(interaction.guild.id, "main")
+        metadata = station_cache.get(genre, {}).get("now", {})
+        title = metadata.get("firstLine", {}).get("title", "")
+        artist = metadata.get("secondLine", {}).get("title", "")
+
+        if not title or not artist:
+            await interaction.response.send_message("Song metadata is missing.", ephemeral=True)
+            return
+
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(token_check_url) as resp:
                     if resp.status == 404:
                         raise ValueError("Not authorized")
-                    await interaction.response.send_message("✅ Liked the current song on Spotify!", ephemeral=True)
-        except Exception:
+                    token_data = await resp.json()
+                    access_token = token_data["access_token"]
+
+                # Search for track
+                query = urllib.parse.quote(f"track:{title} artist:{artist}")
+                search_url = f"https://api.spotify.com/v1/search?q={query}&type=track&limit=1"
+                headers = {"Authorization": f"Bearer {access_token}"}
+
+                async with session.get(search_url, headers=headers) as search_resp:
+                    search_result = await search_resp.json()
+                    items = search_result.get("tracks", {}).get("items", [])
+                    if not items:
+                        await interaction.response.send_message("Couldn't find this song on Spotify.", ephemeral=True)
+                        return
+                    track_id = items[0]["id"]
+
+                # Like the track
+                like_url = "https://api.spotify.com/v1/me/tracks"
+                async with session.put(like_url, headers=headers, json={"ids": [track_id]}) as like_resp:
+                    if like_resp.status in (200, 201):
+                        await interaction.response.send_message("✅ Liked the current song on Spotify!", ephemeral=True)
+                    else:
+                        await interaction.response.send_message("Failed to like the song.", ephemeral=True)
+        except Exception as e:
+            print(f"[Error liking song] {e}")
             params = {
                 "client_id": SPOTIFY_CLIENT_ID,
                 "response_type": "code",
