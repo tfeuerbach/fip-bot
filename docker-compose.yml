@@ -2,7 +2,11 @@ version: "3.9"
 
 services:
   fip-bot:
-    build: .
-    container_name: fip-bot
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent
     restart: unless-stopped
     env_file: .env
+    ports:
+      - "8081:8080"  # Optional if bot ever runs a web service
