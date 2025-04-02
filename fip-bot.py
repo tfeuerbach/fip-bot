@@ -51,6 +51,43 @@ last_song_ids = {}
 def clean(text):
     return text.replace('"', '').replace("'", '').replace("&", ' ').strip()
 
+async def fetch_spotify_url(title, artist):
+    try:
+        async with aiohttp.ClientSession() as session:
+            client_id = SPOTIFY_CLIENT_ID
+            client_secret = SPOTIFY_CLIENT_SECRET
+            if not client_id or not client_secret:
+                raise ValueError("Spotify credentials are missing from the environment.")
+
+            auth_data = aiohttp.BasicAuth(client_id, client_secret)
+            token_payload = {"grant_type": "client_credentials"}
+            async with session.post("https://accounts.spotify.com/api/token", data=token_payload, auth=auth_data) as token_resp:
+                token_data = await token_resp.json()
+                access_token = token_data.get("access_token")
+
+            if not access_token:
+                raise Exception("Failed to obtain access token.")
+
+            headers = {"Authorization": f"Bearer {access_token}"}
+            cleaned_title = re.sub(r"[()\[\]{}]", "", title)
+            cleaned_artist = re.sub(r"[()\[\]{}]", "", artist)
+            query = urllib.parse.quote(f"track:{cleaned_title} artist:{cleaned_artist}")
+            search_url = f"https://api.spotify.com/v1/search?q={query}&type=track&limit=1"
+
+            async with session.get(search_url, headers=headers) as search_resp:
+                search_data = await search_resp.json()
+                items = search_data.get("tracks", {}).get("items", [])
+                if not items:
+                    return None
+
+                track_id = items[0]["id"]
+                return f"https://open.spotify.com/track/{track_id}"
+
+    except Exception as e:
+        print(f"[Spotify Lookup Error] {e}")
+        return None
+
+
 @tasks.loop(seconds=1)
 async def update_station_cache():
     now = int(time.time())
@@ -173,7 +210,7 @@ class FIPControlView(discord.ui.View):
             vc.source = discord.PCMVolumeTransformer(vc.source, volume=max(0.1, volume - 0.1))
             await interaction.response.send_message("🔉 Volume decreased.", ephemeral=True)
 
-    @discord.ui.button(label="Open on Spotify", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Open on Spotify", style=discord.ButtonStyle.success, custom_id="open_spotify_button")
     async def open_spotify(self, interaction: discord.Interaction, button: discord.ui.Button):
         genre = guild_station_map.get(interaction.guild.id, "main")
         metadata = station_cache.get(genre, {}).get("now", {})
@@ -215,9 +252,18 @@ class FIPControlView(discord.ui.View):
                     track_id = items[0]["id"]
                     spotify_url = f"https://open.spotify.com/track/{track_id}"
 
-                    view = discord.ui.View()
-                    view.add_item(discord.ui.Button(label="Open in Spotify", url=spotify_url))
-                    await interaction.response.send_message("🎧 Here's the song on Spotify:", view=view, ephemeral=True)
+                    # Replace the entire View with a new one containing the link button
+                    view = FIPControlView()
+                    # Remove the existing Open on Spotify button (this one)
+                    view.clear_items()
+                    view.add_item(StationDropdown())
+                    view.add_item(discord.ui.Button(label="Open on Spotify", style=discord.ButtonStyle.link, url=spotify_url))
+                    view.add_item(self.info_button)
+                    view.add_item(self.vol_up)
+                    view.add_item(self.vol_down)
+
+                    await interaction.message.edit(view=view)
+                    await interaction.response.defer()
 
         except Exception as e:
             print(f"[Spotify Error] {e}")
