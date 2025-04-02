@@ -7,11 +7,16 @@ from dotenv import load_dotenv
 from datetime import datetime
 import aiohttp
 import urllib.parse
+import re
 
 # Load environment variables
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ENCODING = os.getenv("ENCODING", "mp3")
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+print(SPOTIFY_CLIENT_ID)
+print(SPOTIFY_CLIENT_SECRET)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -43,6 +48,9 @@ current_genres = set()
 next_update_times = {}
 last_song_ids = {}
 
+def clean(text):
+    return text.replace('"', '').replace("'", '').replace("&", ' ').strip()
+
 @tasks.loop(seconds=1)
 async def update_station_cache():
     now = int(time.time())
@@ -57,9 +65,13 @@ async def update_station_cache():
 
             try:
                 url = f"https://fip-metadata.fly.dev/api/metadata/{meta['metadata']}"
+                print(f"[DEBUG] Fetching metadata from URL: {url}")
                 async with session.get(url) as resp:
                     if resp.status == 200:
                         result = await resp.json()
+                        if result is None:
+                            raise ValueError("No metadata returned")
+
                         station_cache[genre] = result
 
                         now_block = result.get("now", {})
@@ -68,7 +80,7 @@ async def update_station_cache():
                         start = now_block.get("startTime")
                         end = now_block.get("endTime")
 
-                        song = now_block.get("song", {})
+                        song = now_block.get("song") or {}
                         song_id = song.get("id")
 
                         if song_id and last_song_ids.get(genre) == song_id:
@@ -83,6 +95,8 @@ async def update_station_cache():
 
                         if start and end:
                             next_update_times[genre] = end + 1
+                    else:
+                        print(f"[HTTP Error] Status {resp.status} for URL: {url}")
             except Exception as e:
                 print(f"Failed to fetch metadata for {genre}: {e}")
 
@@ -112,57 +126,6 @@ async def update_song_embeds():
                     live_messages.pop(guild_id, None)
                 else:
                     print(f"Failed to update message for guild {guild_id}: {e}")
-
-async def switch_station(interaction: discord.Interaction, genre: str):
-    global player
-
-    genre = genre.lower()
-    if genre not in FIP_STREAMS:
-        await interaction.response.send_message("Invalid genre.", ephemeral=True)
-        return
-
-    if not interaction.user.voice or not interaction.user.voice.channel:
-        await interaction.response.send_message("You're not in a voice channel!", ephemeral=True)
-        return
-
-    current_genres.clear()
-    current_genres.add(genre)
-
-    channel = interaction.user.voice.channel
-    stream_url = FIP_STREAMS[genre]["url"]
-    guild_id = interaction.guild.id
-    guild_station_map[guild_id] = genre
-
-    vc = interaction.guild.voice_client
-    if vc:
-        if vc.channel != channel:
-            await vc.move_to(channel)
-        if vc.is_playing():
-            vc.stop()
-        try:
-            audio = discord.FFmpegPCMAudio(stream_url)
-            vc.play(audio)
-        except Exception as e:
-            print(f"[Error] Failed to play new stream: {e}")
-            await interaction.response.send_message("Failed to play the new station stream.", ephemeral=True)
-            return
-        embed = await fetch_metadata_embed(guild_id)
-        await interaction.response.send_message(content=f"🔄 Switched to FIP {genre} in {channel.name}", embed=embed, view=FIPControlView())
-        message = await interaction.original_response()
-        live_messages[guild_id] = message
-        return
-
-    try:
-        player = await channel.connect()
-        audio = discord.FFmpegPCMAudio(stream_url)
-        player.play(audio)
-        embed = await fetch_metadata_embed(guild_id)
-        await interaction.response.send_message(content=f"🎶 Now playing FIP {genre} in {channel.name}", embed=embed, view=FIPControlView())
-        message = await interaction.original_response()
-        live_messages[guild_id] = message
-    except Exception as e:
-        print(f"Error: {e}")
-        await interaction.response.send_message("Something went wrong.", ephemeral=True)
 
 class StationDropdown(discord.ui.Select):
     def __init__(self):
@@ -223,18 +186,93 @@ class FIPControlView(discord.ui.View):
 
         try:
             async with aiohttp.ClientSession() as session:
-                query = urllib.parse.quote(f"track:{title} artist:{artist}")
+                client_id = SPOTIFY_CLIENT_ID
+                client_secret = SPOTIFY_CLIENT_SECRET
+                if not client_id or not client_secret:
+                    raise ValueError("Spotify credentials are missing from the environment.")
+
+                auth_data = aiohttp.BasicAuth(client_id, client_secret)
+                token_payload = {"grant_type": "client_credentials"}
+                async with session.post("https://accounts.spotify.com/api/token", data=token_payload, auth=auth_data) as token_resp:
+                    token_data = await token_resp.json()
+                    access_token = token_data.get("access_token")
+
+                if not access_token:
+                    raise Exception("Failed to obtain access token.")
+
+                headers = {"Authorization": f"Bearer {access_token}"}
+                cleaned_title = re.sub(r"[()\[\]{}]", "", title)
+                cleaned_artist = re.sub(r"[()\[\]{}]", "", artist)
+                query = urllib.parse.quote(f"track:{cleaned_title} artist:{cleaned_artist}")
                 search_url = f"https://api.spotify.com/v1/search?q={query}&type=track&limit=1"
 
-                # Spotify's public search endpoint requires a token.
-                # We'll just redirect users to a web search for now.
-                web_url = f"https://open.spotify.com/search/{urllib.parse.quote(title + ' ' + artist)}"
-                view = discord.ui.View()
-                view.add_item(discord.ui.Button(label="Search on Spotify", url=web_url))
-                await interaction.response.send_message("🎧 Click below to open this song on Spotify.", view=view, ephemeral=True)
+                async with session.get(search_url, headers=headers) as search_resp:
+                    search_data = await search_resp.json()
+                    items = search_data.get("tracks", {}).get("items", [])
+                    if not items:
+                        raise Exception("No tracks found.")
+
+                    track_id = items[0]["id"]
+                    spotify_url = f"https://open.spotify.com/track/{track_id}"
+
+                    view = discord.ui.View()
+                    view.add_item(discord.ui.Button(label="Open in Spotify", url=spotify_url))
+                    await interaction.response.send_message("🎧 Here's the song on Spotify:", view=view, ephemeral=True)
+
         except Exception as e:
-            print(f"[Error opening song] {e}")
-            await interaction.response.send_message("Something went wrong while trying to search Spotify.", ephemeral=True)
+            print(f"[Spotify Error] {e}")
+            await interaction.response.send_message("Couldn't find this song on Spotify.", ephemeral=True)
+
+async def switch_station(interaction: discord.Interaction, genre: str):
+    global player
+
+    genre = genre.lower()
+    if genre not in FIP_STREAMS:
+        await interaction.response.send_message("Invalid genre.", ephemeral=True)
+        return
+
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.response.send_message("You're not in a voice channel!", ephemeral=True)
+        return
+
+    current_genres.clear()
+    current_genres.add(genre)
+
+    channel = interaction.user.voice.channel
+    stream_url = FIP_STREAMS[genre]["url"]
+    guild_id = interaction.guild.id
+    guild_station_map[guild_id] = genre
+
+    vc = interaction.guild.voice_client
+    try:
+        if vc:
+            if vc.channel != channel:
+                await vc.move_to(channel)
+            if vc.is_playing():
+                vc.stop()
+            audio = discord.FFmpegPCMAudio(stream_url)
+            vc.play(audio)
+        else:
+            player = await channel.connect()
+            audio = discord.FFmpegPCMAudio(stream_url)
+            player.play(audio)
+
+        embed = await fetch_metadata_embed(guild_id)
+        if guild_id in live_messages:
+            try:
+                await live_messages[guild_id].edit(content=f"🔄 Switched to FIP {genre} in {channel.name}", embed=embed, view=FIPControlView())
+                await interaction.response.defer()
+            except Exception as e:
+                print(f"[Edit Error] Failed to edit message: {e}")
+                await interaction.response.send_message("Switched, but failed to update message.", ephemeral=True)
+        else:
+            await interaction.response.send_message(content=f"🎶 Now playing FIP {genre} in {channel.name}", embed=embed, view=FIPControlView())
+            message = await interaction.original_response()
+            live_messages[guild_id] = message
+
+    except Exception as e:
+        print(f"[Switch Error] {e}")
+        await interaction.response.send_message("Something went wrong.", ephemeral=True)
 
 async def fetch_metadata_embed(guild_id):
     genre = guild_station_map.get(guild_id, "main")
@@ -244,13 +282,22 @@ async def fetch_metadata_embed(guild_id):
         return None
 
     try:
-        song = data.get("now", {}).get("song")
-        visuals = data.get("now", {}).get("visuals", {}).get("card")
-        first_line = data.get("now", {}).get("firstLine", {}).get("title") or ""
-        second_line = data.get("now", {}).get("secondLine", {}).get("title") or ""
+        now_block = data.get("now", {})
+        song = now_block.get("song") or None
+        visuals = now_block.get("visuals", {}).get("card")
+        first_line = now_block.get("firstLine", {}).get("title") or ""
+        second_line = now_block.get("secondLine", {}).get("title") or ""
 
         if not song:
-            return None
+            embed = discord.Embed(
+                title="🔇 No metadata for the song currently playing",
+                description="FIP is currently broadcasting a talk segment, station ID, or a song without metadata.",
+                color=discord.Color.dark_grey()
+            )
+            if visuals and visuals.get("src"):
+                embed.set_thumbnail(url=visuals["src"])
+            embed.set_footer(text=f"Station: {data['stationName'].upper()}")
+            return embed
 
         embed = discord.Embed(
             title=f"{first_line} – {second_line}",
