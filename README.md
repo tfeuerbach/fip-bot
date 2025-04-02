@@ -6,13 +6,15 @@
 
 ## ✨ Features
 
-This lightweight bot lets users stream **Radio France’s FIP stations** directly into a Discord voice channel.
+This lightweight bot streams **Radio France’s FIP stations** directly into a Discord voice channel, with live metadata and now playing info.
 
-- 🎶 Listen to FIP and its genre stations (Jazz, Rock, Groove, etc.)
-- 📻 Interactive UI in Discord with dropdowns & buttons
-- 📡 Slash commands for full control
-- 🔊 Change stations, control volume, get now playing
-- 🐳 Fully dockerized for production use or local hosting
+- 🎶 Stream FIP and all its genre stations (Jazz, Rock, Groove, etc.)
+- 🧠 Auto-updating embed with now-playing info (song title, artist, release, year, cover art)
+- 🔗 One-click “Open on Spotify” button (track link is pre-fetched automatically)
+- 📻 Interactive dropdowns and buttons (station switch, volume, info)
+- 💬 Reuses chat messages to avoid clutter when switching stations
+- 📡 Slash commands for full bot control
+- 🐳 Fully dockerized for self-hosting or production deployment
 
 ## 🚀 Quick Start (Docker)
 
@@ -38,6 +40,9 @@ Create a `.env` file with the following:
 BOT_TOKEN=your_discord_bot_token
 ENCODING=mp3
 
+SPOTIFY_CLIENT_ID=your_spotify_client_id
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+
 FIP_MAIN=https://icecast.radiofrance.fr/fip-midfi.mp3?id=radiofrance
 FIP_ROCK=https://icecast.radiofrance.fr/fiprock-midfi.mp3?id=radiofrance
 FIP_JAZZ=https://icecast.radiofrance.fr/fipjazz-midfi.mp3?id=radiofrance
@@ -51,13 +56,27 @@ FIP_POP=https://icecast.radiofrance.fr/fippop-midfi.mp3?id=radiofrance
 FIP_METAL=https://icecast.radiofrance.fr/fipmetal-midfi.mp3?id=radiofrance
 ```
 
-## ⚙️ Commands
+## ⚙️ Slash Commands
 
 - `/fip_join [genre]` — Join your VC and start a station (e.g. main, jazz, reggae, etc.)
-- `/fip_info` — Show now playing metadata (song title, release, artwork)
-- `/fip_leave` — Leave the voice channel
+- `/fip_info` — Show the current song playing on your selected station
+- `/fip_leave` — Disconnect the bot from the voice channel
 
-You can also interact using the **GUI dropdown** and buttons embedded after joining a station.
+## 🖱️ Embedded UI
+
+Once connected, the bot creates an interactive message in chat with:
+
+- 🎚 Dropdown to switch between stations
+- 🔊 Volume control buttons
+- ℹ️ Info button to re-display now-playing metadata
+- 🎧 **Open on Spotify** button — opens the track link directly!
+
+## 🧠 Smart Features
+
+- Caches current song metadata per station
+- Detects and suppresses metadata updates during talk/interview segments
+- Updates the same chat message when switching stations (no chat spam)
+- Automatically pre-fetches Spotify track ID to generate instant links
 
 ## 📸 Screenshots
 
@@ -65,12 +84,14 @@ Coming soon!
 
 ## 🛠️ Contributing
 
-PRs welcome! If you'd like to improve or add more stations, feel free to submit changes.
+Pull requests are welcome! Want to add another FIP station or feature? Go for it.
 
 ## 🧠 Built With
 
 - [discord.py](https://github.com/Rapptz/discord.py)
 - [aiohttp](https://docs.aiohttp.org/)
+- [Spotify Web API](https://developer.spotify.com/documentation/web-api/)
+- Metadata from [fip-metadata.fly.dev](https://fip-metadata.fly.dev/)
 - FIP Radio streams from [Radio France](https://www.radiofrance.fr/fip)
 
 ## 📄 License
