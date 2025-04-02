@@ -12,9 +12,6 @@ import urllib.parse
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ENCODING = os.getenv("ENCODING", "mp3")
-SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
-SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI")
-SPOTIFY_AUTH_SERVER = os.getenv("SPOTIFY_AUTH_SERVER", "http://localhost:8080")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -43,8 +40,8 @@ live_messages = {}
 station_cache = {}
 guild_song_ids = {}
 current_genres = set()
-next_update_times = {}  # genre: timestamp
-last_song_ids = {}  # genre: song_id
+next_update_times = {}
+last_song_ids = {}
 
 @tasks.loop(seconds=1)
 async def update_station_cache():
@@ -75,7 +72,7 @@ async def update_station_cache():
                         song_id = song.get("id")
 
                         if song_id and last_song_ids.get(genre) == song_id:
-                            continue  # No change in song, skip update
+                            continue
 
                         if title and artist:
                             print(f"[Cache Updated] {genre}: {title} - {artist} (Start Time: {datetime.fromtimestamp(start).strftime('%H:%M:%S')} - End Time: {datetime.fromtimestamp(end).strftime('%H:%M:%S')})")
@@ -213,11 +210,8 @@ class FIPControlView(discord.ui.View):
             vc.source = discord.PCMVolumeTransformer(vc.source, volume=max(0.1, volume - 0.1))
             await interaction.response.send_message("🔉 Volume decreased.", ephemeral=True)
 
-    @discord.ui.button(label="Like on Spotify", style=discord.ButtonStyle.success)
-    async def like_spotify(self, interaction: discord.Interaction, button: discord.ui.Button):
-        user_id = str(interaction.user.id)
-        token_check_url = f"{SPOTIFY_AUTH_SERVER}/token/{user_id}"
-
+    @discord.ui.button(label="Open on Spotify", style=discord.ButtonStyle.success)
+    async def open_spotify(self, interaction: discord.Interaction, button: discord.ui.Button):
         genre = guild_station_map.get(interaction.guild.id, "main")
         metadata = station_cache.get(genre, {}).get("now", {})
         title = metadata.get("firstLine", {}).get("title", "")
@@ -229,58 +223,18 @@ class FIPControlView(discord.ui.View):
 
         try:
             async with aiohttp.ClientSession() as session:
-                # Get access token from auth server
-                async with session.get(token_check_url) as resp:
-                    if resp.status == 404:
-                        raise ValueError("Not authorized")
-                    if resp.status != 200:
-                        raise Exception(f"Token server error: {resp.status}")
-                    data = await resp.json()
-                    access_token = data["access_token"]
-
-                # Search for song
-                headers = {"Authorization": f"Bearer {access_token}"}
                 query = urllib.parse.quote(f"track:{title} artist:{artist}")
                 search_url = f"https://api.spotify.com/v1/search?q={query}&type=track&limit=1"
 
-                async with session.get(search_url, headers=headers) as search_resp:
-                    if search_resp.status != 200:
-                        raise Exception(f"Search failed with status: {search_resp.status}")
-                    search_result = await search_resp.json()
-                    items = search_result.get("tracks", {}).get("items", [])
-                    if not items:
-                        await interaction.response.send_message("Couldn't find this song on Spotify.", ephemeral=True)
-                        return
-                    track_id = items[0]["id"]
-
-                # Like the song
-                like_url = f"https://api.spotify.com/v1/me/tracks"
-                async with session.put(like_url, headers=headers, json={"ids": [track_id]}) as like_resp:
-                    if like_resp.status in (200, 201):
-                        await interaction.response.send_message("✅ Liked the current song on Spotify!", ephemeral=True)
-                    else:
-                        raise Exception(f"Like failed with status: {like_resp.status}")
-
-        except ValueError:
-            # Prompt user to authorize Spotify
-            print(f"[Spotify Auth Required] user_id: {user_id}")
-            params = {
-                "client_id": SPOTIFY_CLIENT_ID,
-                "response_type": "code",
-                "redirect_uri": SPOTIFY_REDIRECT_URI,
-                "scope": "user-library-modify",
-                "state": user_id
-            }
-            url = f"https://accounts.spotify.com/authorize?{urllib.parse.urlencode(params)}"
-            view = discord.ui.View()
-            view.add_item(discord.ui.Button(label="Authorize Spotify", url=url))
-            await interaction.response.send_message("Please authorize Spotify first:", view=view, ephemeral=True)
-
+                # Spotify's public search endpoint requires a token.
+                # We'll just redirect users to a web search for now.
+                web_url = f"https://open.spotify.com/search/{urllib.parse.quote(title + ' ' + artist)}"
+                view = discord.ui.View()
+                view.add_item(discord.ui.Button(label="Search on Spotify", url=web_url))
+                await interaction.response.send_message("🎧 Click below to open this song on Spotify.", view=view, ephemeral=True)
         except Exception as e:
-            import traceback
-            traceback.print_exc()  # Print full error traceback
-            print(f"[Error liking song] {e}")
-            await interaction.response.send_message("Something went wrong when trying to like the song.", ephemeral=True)
+            print(f"[Error opening song] {e}")
+            await interaction.response.send_message("Something went wrong while trying to search Spotify.", ephemeral=True)
 
 async def fetch_metadata_embed(guild_id):
     genre = guild_station_map.get(guild_id, "main")

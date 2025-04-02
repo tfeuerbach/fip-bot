@@ -2,9 +2,10 @@ from flask import Flask, request, redirect
 import requests
 import os
 from dotenv import load_dotenv
+load_dotenv()
 from db_utils import store_tokens, get_tokens
 
-load_dotenv()
+print("[ENV DEBUG] DATABASE_URL:", os.getenv("DATABASE_URL"))
 
 app = Flask(__name__)
 
@@ -34,6 +35,8 @@ def get_token(user_id):
             "access_token": tokens["access_token"]
         }
     except Exception as e:
+        import traceback
+        traceback.print_exc()  # Add this for full trace in logs
         print(f"[Auth Server Error] /token/{user_id} - {e}")
         return {"error": str(e)}, 500
 
