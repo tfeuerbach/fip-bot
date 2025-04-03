@@ -10,7 +10,7 @@ from spotify import fetch_spotify_url
 from views import FIPControlView
 from db import start_session, end_session
 
-bot = None  # 🧠 placeholder for bot reference
+bot = None  # placeholder for bot reference
 
 def set_bot(bot_instance):
     global bot
@@ -30,7 +30,7 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
             await interaction.response.send_message("You're not in a voice channel!", ephemeral=True)
         return
 
-    # ✅ Immediately acknowledge interaction to avoid timeouts
+    # Immediately acknowledge interaction to avoid timeouts
     if not interaction.response.is_done():
         await interaction.response.defer()
 
