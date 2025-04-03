@@ -29,3 +29,21 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 intents.voice_states = True
+
+# formerly state.py
+
+player = None
+
+# Server-specific state
+guild_station_map = {}
+live_messages = {}
+station_cache = {}
+guild_song_ids = {}
+current_genres = set()
+next_update_times = {}
+last_song_ids = {}
+
+# from utils.py
+
+def clean(text):
+    return text.replace('"', '').replace("'", '').replace("&", ' ').strip()

@@ -2,7 +2,7 @@
 
 import discord
 from discord import app_commands
-from state import player, guild_station_map, live_messages
+from config import player, guild_station_map, live_messages
 from metadata import fetch_metadata_embed
 from handlers import switch_station
 from views import FIPControlView

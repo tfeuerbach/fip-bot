@@ -1,8 +1,7 @@
 # metadata.py
 
 import discord
-from state import guild_station_map, station_cache
-from config import FIP_STREAMS
+from config import guild_station_map, station_cache, FIP_STREAMS
 from spotify import fetch_spotify_url
 
 async def fetch_metadata_embed(guild_id):

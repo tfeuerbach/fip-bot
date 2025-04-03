@@ -1,8 +1,7 @@
 # handlers.py
 
 import discord
-from config import FIP_STREAMS
-from state import player, guild_station_map, live_messages, current_genres
+from config import FIP_STREAMS, player, guild_station_map, live_messages, current_genres
 from metadata import fetch_metadata_embed
 
 # Let the caller pass the view, to avoid circular import

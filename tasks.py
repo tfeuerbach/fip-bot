@@ -4,8 +4,7 @@ import time
 import aiohttp
 from datetime import datetime
 from discord.ext import tasks
-from config import FIP_STREAMS
-from state import current_genres, next_update_times, last_song_ids, station_cache, guild_station_map, live_messages, guild_song_ids
+from config import FIP_STREAMS, current_genres, next_update_times, last_song_ids, station_cache, guild_station_map, live_messages, guild_song_ids
 from metadata import fetch_metadata_embed
 from views import FIPControlView
 
