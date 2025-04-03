@@ -77,6 +77,7 @@ Once connected, the bot creates an interactive message in chat with:
 - Detects and suppresses metadata updates during talk/interview segments
 - Updates the same chat message when switching stations (no chat spam)
 - Automatically pre-fetches Spotify track ID to generate instant links
+- Falls back to MusicBrainz API to get album artwork when images are unavailable/invalid from radiofrance.fr
 
 ## 🗂️ File Structure Overview
 

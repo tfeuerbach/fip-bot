@@ -1,24 +1,26 @@
+# stats.py
+
 import discord
 from db import get_stats
 from table2ascii import table2ascii as t2a, PresetStyle
 
-async def send_stats(interaction: discord.Interaction):
-    await interaction.response.defer()
-    records = get_stats(str(interaction.guild.id), limit=100)
-
+async def build_stats_embed(guild: discord.Guild) -> discord.Embed:
+    records = get_stats(str(guild.id), limit=100)
     if not records:
-        await interaction.followup.send("No listening data yet.")
-        return
+        return discord.Embed(
+            title="📊 FIP Listening Stats",
+            description="No listening data yet.",
+            color=discord.Color.greyple()
+        )
 
     body = []
     for user_id, station, seconds in records:
         minutes = seconds // 60
         try:
-            member = await interaction.guild.fetch_member(int(user_id))
+            member = await guild.fetch_member(int(user_id))
             username = member.display_name
         except:
             username = f"Unknown ({user_id})"
-
         body.append([username, station, minutes])
 
     output = t2a(
@@ -27,9 +29,8 @@ async def send_stats(interaction: discord.Interaction):
         style=PresetStyle.thin_compact
     )
 
-    embed = discord.Embed(
+    return discord.Embed(
         title="📊 FIP Listening Stats",
         description=f"```\n{output}\n```",
         color=discord.Color.blue()
     )
-    await interaction.followup.send(embed=embed)

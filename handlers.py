@@ -10,17 +10,29 @@ from spotify import fetch_spotify_url
 from views import FIPControlView
 from db import start_session, end_session
 
+bot = None  # 🧠 placeholder for bot reference
+
+def set_bot(bot_instance):
+    global bot
+    bot = bot_instance
+
 async def switch_station(interaction: discord.Interaction, genre: str, view=None):
     global player
 
     genre = genre.lower()
     if genre not in FIP_STREAMS:
-        await interaction.response.send_message("Invalid genre.", ephemeral=True)
+        if not interaction.response.is_done():
+            await interaction.response.send_message("Invalid genre.", ephemeral=True)
         return
 
     if not interaction.user.voice or not interaction.user.voice.channel:
-        await interaction.response.send_message("You're not in a voice channel!", ephemeral=True)
+        if not interaction.response.is_done():
+            await interaction.response.send_message("You're not in a voice channel!", ephemeral=True)
         return
+
+    # ✅ Immediately acknowledge interaction to avoid timeouts
+    if not interaction.response.is_done():
+        await interaction.response.defer()
 
     current_genres.clear()
     current_genres.add(genre)
@@ -48,7 +60,6 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
             player.play(discord.FFmpegPCMAudio(stream_url))
             print("[DEBUG] Connected and started stream.")
 
-        # Update session tracking
         for member in channel.members:
             if not member.bot:
                 print(f"[DEBUG] Updating session for user {member.id}")
@@ -56,7 +67,6 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
                 end_session(str(guild_id), str(member.id), now)
                 start_session(str(guild_id), str(member.id), genre, now)
 
-        # Retry up to 5 times to get metadata
         embed = None
         for i in range(5):
             embed = await fetch_metadata_embed(guild_id)
@@ -73,11 +83,15 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
                 color=discord.Color.blurple()
             )
 
-        # ✅ Now fetch the Spotify URL *after* metadata has loaded
         title = embed.title.split(" – ")[0] if "–" in embed.title else ""
         artist = embed.title.split(" – ")[1] if "–" in embed.title else ""
         spotify_url = await fetch_spotify_url(title, artist)
         print(f"[Switch Station] Fetched Spotify URL: {spotify_url}")
+
+        # ✅ Set bot activity
+        if title and artist and bot:
+            activity = discord.Activity(type=discord.ActivityType.listening, name=f"{title} - {artist}")
+            await bot.change_presence(activity=activity)
 
         view = FIPControlView(guild_id=guild_id, spotify_url=spotify_url)
 
@@ -87,21 +101,20 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
                 embed=embed,
                 view=view
             )
-            await interaction.response.defer()
             print("[DEBUG] Edited existing message.")
         else:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 content=f"🎶 Now playing FIP {genre} in {channel.name}",
                 embed=embed,
                 view=view
             )
             live_messages[guild_id] = await interaction.original_response()
-            print("[DEBUG] Sent new message and stored reference.")
+            print("[DEBUG] Sent new message and stored reference.]")
 
     except Exception as e:
         print(f"[Switch Error] {e}")
         traceback.print_exc()
         try:
-            await interaction.response.send_message("Something went wrong.", ephemeral=True)
+            await interaction.followup.send("Something went wrong.", ephemeral=True)
         except discord.HTTPException as http_error:
             print(f"[Switch Error] Couldn't send error message: {http_error}")

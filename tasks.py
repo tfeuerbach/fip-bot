@@ -1,3 +1,5 @@
+# tasks.py
+
 import time
 import aiohttp
 from datetime import datetime
@@ -59,6 +61,8 @@ async def update_song_embeds():
         if not song_id or guild_song_ids.get(guild_id) == song_id:
             continue
 
+        print(f"[DEBUG] New song detected for guild {guild_id}, genre {genre}, song ID: {song_id}")
+
         title = data.get("now", {}).get("firstLine", {}).get("title", "")
         artist = data.get("now", {}).get("secondLine", {}).get("title", "")
 
@@ -72,5 +76,7 @@ async def update_song_embeds():
                     view=FIPControlView(guild_id=guild_id, spotify_url=spotify_url)
                 )
                 guild_song_ids[guild_id] = song_id
+                print(f"[DEBUG] Updated embed and view for guild {guild_id}")
             except Exception as e:
+                print(f"[Embed Update Error] {e}")
                 live_messages.pop(guild_id, None)

@@ -2,6 +2,7 @@ import discord
 import datetime
 from discord.ext import commands
 from config import BOT_TOKEN, intents, guild_station_map
+from handlers import set_bot
 from tasks import update_station_cache, update_song_embeds
 from commands import setup_commands
 from db import init_db, start_session, end_session
@@ -17,6 +18,8 @@ async def on_ready():
         print(f"❌ Sync error: {e}")
     print(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
     print("------")
+    set_bot(bot)
+    
     init_db()
     update_station_cache.start()
     update_song_embeds.start()
