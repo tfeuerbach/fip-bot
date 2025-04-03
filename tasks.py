@@ -16,6 +16,7 @@ from config import (
 )
 from metadata import fetch_metadata_embed
 from views import FIPControlView
+from spotify import fetch_spotify_url
 
 # Periodically fetch updated metadata for currently active FIP stations
 @tasks.loop(seconds=1)
@@ -66,11 +67,17 @@ async def update_song_embeds():
         if not song_id or guild_song_ids.get(guild_id) == song_id:
             continue
 
+        # Extract title and artist for Spotify lookup
+        title = data.get("now", {}).get("firstLine", {}).get("title", "")
+        artist = data.get("now", {}).get("secondLine", {}).get("title", "")
+        spotify_url = await fetch_spotify_url(title, artist)
+
         # Build and send updated embed
         embed = await fetch_metadata_embed(guild_id)
         if embed:
             try:
-                await message.edit(embed=embed, view=FIPControlView())
+                # Pass Spotify URL to control view so the button is accurate
+                await message.edit(embed=embed, view=FIPControlView(spotify_url=spotify_url))
                 guild_song_ids[guild_id] = song_id
             except Exception as e:
                 print(f"[Embed Update Error] {e}")
