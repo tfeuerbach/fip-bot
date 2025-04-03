@@ -77,7 +77,7 @@ async def fetch_metadata_embed(guild_id):
 
         embed = discord.Embed(
             title=f"{first_line} – {second_line}",
-            description=f"*{song['release']['title']}* ({song['year']})",
+            description=f"*{song['release']['title']}* ({song['year']})\n[**FIP**](https://www.radiofrance.fr/fip)",
             color=discord.Color.purple()
         )
         if thumb_url:
