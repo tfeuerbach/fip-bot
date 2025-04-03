@@ -1,5 +1,3 @@
-# commands.py
-
 import discord
 from discord import app_commands
 from config import player, guild_station_map, live_messages
@@ -8,6 +6,7 @@ from handlers import switch_station
 from views import FIPControlView
 from db import get_stats
 from table2ascii import table2ascii as t2a, PresetStyle
+from handlers import bot  # ✅ Access the bot instance
 
 def setup_commands(bot):
     @bot.tree.command(name="fip_join", description="Join your voice channel and play FIP Radio")
@@ -25,6 +24,10 @@ def setup_commands(bot):
             player = None
             guild_station_map.pop(interaction.guild.id, None)
             live_messages.pop(interaction.guild.id, None)
+
+            # Clear bot activity
+            await bot.change_presence(activity=None)
+
             await interaction.response.send_message("Left the voice channel.")
         else:
             await interaction.response.send_message("I'm not connected to a voice channel.", ephemeral=True)
