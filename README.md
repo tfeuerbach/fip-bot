@@ -25,7 +25,7 @@ Make sure you have Docker installed, then:
 git clone https://github.com/yourusername/fip-bot.git
 cd fip-bot
 
-# Copy the .env example and fill in your Discord bot token
+# Copy the .env example and fill in your Discord bot token + Spotify creds
 cp .env.example .env
 
 # Build and run the container
@@ -77,6 +77,23 @@ Once connected, the bot creates an interactive message in chat with:
 - Detects and suppresses metadata updates during talk/interview segments
 - Updates the same chat message when switching stations (no chat spam)
 - Automatically pre-fetches Spotify track ID to generate instant links
+
+## 🗂️ File Structure Overview
+
+| File                 | Purpose                                                                  |
+|----------------------|--------------------------------------------------------------------------|
+| `bot.py`             | Entrypoint that starts the bot and registers commands & background tasks |
+| `commands.py`        | Slash command definitions (`/fip_join`, `/fip_leave`, etc.)              |
+| `handlers.py`        | Core logic to switch stations, connect audio, and update embeds          |
+| `views.py`           | Discord UI components: dropdown, volume buttons, Spotify button          |
+| `tasks.py`           | Background loops to fetch metadata and update embeds in real time        |
+| `metadata.py`        | Builds rich now-playing embeds from the FIP metadata API                 |
+| `spotify.py`         | Fetches Spotify track links based on FIP metadata                        |
+| `config.py`          | All shared config, environment vars, FIP stream URLs, and app state      |
+| `requirements.txt`   | Python dependencies                                                      |
+| `Dockerfile`         | Docker image setup                                                       |
+| `docker-compose.yml` | Easy multi-container support (optional)                                  |
+| `.env.example`       | Sample environment file for local development                            |
 
 ## 📸 Screenshots
 
