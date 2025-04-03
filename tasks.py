@@ -44,6 +44,7 @@ async def update_station_cache():
                             next_update_times[genre] = end + 1
 
             except Exception as e:
+                print(f"[Metadata Fetch Error] {e}")
 
 @tasks.loop(seconds=1)
 async def update_song_embeds():
@@ -60,7 +61,6 @@ async def update_song_embeds():
 
         title = data.get("now", {}).get("firstLine", {}).get("title", "")
         artist = data.get("now", {}).get("secondLine", {}).get("title", "")
-        print(f"[Song Embed] Fetching Spotify URL for: {title} - {artist}")
 
         spotify_url = await fetch_spotify_url(title, artist)
 
