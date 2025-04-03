@@ -1,5 +1,7 @@
-__pycache__/
-*.pyc
 .env
 .dockerignore
 .git
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
