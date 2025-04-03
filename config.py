@@ -60,6 +60,9 @@ next_update_times = {}
 # Caches the last seen song ID per station (used to detect changes)
 last_song_ids = {}
 
+# Track current volume per guild (default: 1.0)
+guild_volumes = {}
+
 # Cleans up strings by removing quotes and ampersands
 def clean(text):
     return text.replace('"', '').replace("'", '').replace("&", ' ').strip()
