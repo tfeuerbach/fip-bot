@@ -68,21 +68,13 @@ def end_session(guild_id, user_id, end_time):
 
         conn.commit()
 
-def get_leaderboard(guild_id, station=None, limit=10):
+def get_stats(guild_id, limit=50):
     with get_conn() as conn, conn.cursor() as cur:
-        if station:
-            cur.execute("""
-            SELECT user_id, seconds_listened FROM user_listening
-            WHERE guild_id = %s AND station = %s
-            ORDER BY seconds_listened DESC
-            LIMIT %s
-            """, (str(guild_id), station, limit))
-        else:
-            cur.execute("""
-            SELECT user_id, SUM(seconds_listened) as total FROM user_listening
+        cur.execute("""
+            SELECT user_id, station, seconds_listened
+            FROM user_listening
             WHERE guild_id = %s
-            GROUP BY user_id
-            ORDER BY total DESC
+            ORDER BY user_id, seconds_listened DESC
             LIMIT %s
-            """, (str(guild_id), limit))
+        """, (str(guild_id), limit))
         return cur.fetchall()

@@ -1,7 +1,7 @@
 # metadata.py
 
 import discord
-from config import guild_station_map, station_cache
+from config import guild_station_map, station_cache, guild_volumes
 
 async def fetch_metadata_embed(guild_id):
     genre = guild_station_map.get(guild_id, "main")
@@ -20,6 +20,8 @@ async def fetch_metadata_embed(guild_id):
         first_line = now_block.get("firstLine", {}).get("title", "")
         second_line = now_block.get("secondLine", {}).get("title", "")
 
+        volume = guild_volumes.get(guild_id, 1.0)
+
         if not song:
             embed = discord.Embed(
                 title="🔇 No metadata for the song currently playing",
@@ -28,6 +30,7 @@ async def fetch_metadata_embed(guild_id):
             )
             if visuals and visuals.get("src"):
                 embed.set_thumbnail(url=visuals["src"])
+            embed.set_footer(text=f"Station: {data['stationName'].upper()} • 🔊 Volume: {volume:.1f}")
             return embed
 
         embed = discord.Embed(
@@ -37,9 +40,9 @@ async def fetch_metadata_embed(guild_id):
         )
         if visuals and visuals.get("src"):
             embed.set_thumbnail(url=visuals["src"])
-        embed.set_footer(text=f"Label: {song['release']['label']} • Station: {data['stationName'].upper()}")
-
+        embed.set_footer(text=f"Label: {song['release']['label']} • Station: {data['stationName'].upper()} • 🔊 Volume: {volume:.1f}")
         return embed
+
     except Exception as e:
         print(f"Error building embed: {e}")
         return None

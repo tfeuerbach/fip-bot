@@ -6,7 +6,8 @@ from config import player, guild_station_map, live_messages
 from metadata import fetch_metadata_embed
 from handlers import switch_station
 from views import FIPControlView
-from db import get_leaderboard
+from db import get_stats
+from table2ascii import table2ascii as t2a, PresetStyle
 
 def setup_commands(bot):
     @bot.tree.command(name="fip_join", description="Join your voice channel and play FIP Radio")
@@ -36,13 +37,37 @@ def setup_commands(bot):
         else:
             await interaction.response.send_message("I'm not connected to a voice channel.", ephemeral=True)
 
-    @bot.tree.command(name="fip_leaderboard", description="Show the top listeners in this server")
-    async def fip_leaderboard(interaction: discord.Interaction):
+    @bot.tree.command(name="fip_stats", description="Show listening stats for all users and stations.")
+    async def fip_stats(interaction: discord.Interaction):
         await interaction.response.defer()
-        leaderboard = get_leaderboard(str(interaction.guild.id))
-        if not leaderboard:
+        records = get_stats(str(interaction.guild.id), limit=100)
+
+        if not records:
             await interaction.followup.send("No listening data yet.")
             return
 
-        formatted = [f"**<@{uid}>** — `{seconds // 60} min`" for uid, seconds in leaderboard]
-        await interaction.followup.send("\n".join(formatted))
+        body = []
+        for user_id, station, seconds in records:
+            minutes = seconds // 60
+
+            # Try to fetch user object; fallback to raw ID string if user not found
+            try:
+                member = await interaction.guild.fetch_member(int(user_id))
+                username = member.display_name
+            except:
+                username = f"Unknown ({user_id})"
+
+            body.append([username, station, minutes])
+
+        output = t2a(
+            header=["User", "Station", "Minutes"],
+            body=body,
+            style=PresetStyle.thin_compact
+        )
+
+        embed = discord.Embed(
+            title="📊 FIP Listening Stats",
+            description=f"```\n{output}\n```",
+            color=discord.Color.blue()
+        )
+        await interaction.followup.send(embed=embed)
