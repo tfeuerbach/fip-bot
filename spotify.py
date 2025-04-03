@@ -10,11 +10,9 @@ from config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 async def fetch_spotify_url(title, artist):
     try:
         async with aiohttp.ClientSession() as session:
-            # Ensure Spotify credentials are set
             if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
                 raise ValueError("Missing Spotify credentials")
 
-            # Step 1: Get access token via client credentials flow
             auth_data = aiohttp.BasicAuth(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)
             token_payload = {"grant_type": "client_credentials"}
 
@@ -29,23 +27,24 @@ async def fetch_spotify_url(title, artist):
             if not access_token:
                 raise Exception("Spotify token fetch failed")
 
-            # Step 2: Perform search query for the track
             headers = {"Authorization": f"Bearer {access_token}"}
-            query = urllib.parse.quote(f"track:{title} artist:{artist}")
-            url = f"https://api.spotify.com/v1/search?q={query}&type=track&limit=1"
+            query = f"track:{title} artist:{artist}"
+            print(f"[Spotify Search] Query: {query}")
+            url = f"https://api.spotify.com/v1/search?q={urllib.parse.quote(query)}&type=track&limit=1"
 
             async with session.get(url, headers=headers) as search_resp:
                 search_data = await search_resp.json()
                 items = search_data.get("tracks", {}).get("items", [])
 
-                # If no match found, return None
                 if not items:
+                    print("[Spotify Search] No results found.")
                     return None
 
-                # Return the URL of the top result
-                return f"https://open.spotify.com/track/{items[0]['id']}"
+                first = items[0]
+                print(f"[Spotify Match] Found: {first['name']} by {[a['name'] for a in first['artists']]}")
+
+                return f"https://open.spotify.com/track/{first['id']}"
 
     except Exception as e:
-        # Log the error and return None on failure
         print(f"[Spotify Error] {e}")
         return None

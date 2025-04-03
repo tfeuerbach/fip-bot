@@ -6,6 +6,8 @@ import datetime
 import traceback
 from config import FIP_STREAMS, player, guild_station_map, live_messages, current_genres
 from metadata import fetch_metadata_embed
+from spotify import fetch_spotify_url
+from views import FIPControlView
 from db import start_session, end_session
 
 async def switch_station(interaction: discord.Interaction, genre: str, view=None):
@@ -71,6 +73,14 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
                 color=discord.Color.blurple()
             )
 
+        # ✅ Now fetch the Spotify URL *after* metadata has loaded
+        title = embed.title.split(" – ")[0] if "–" in embed.title else ""
+        artist = embed.title.split(" – ")[1] if "–" in embed.title else ""
+        spotify_url = await fetch_spotify_url(title, artist)
+        print(f"[Switch Station] Fetched Spotify URL: {spotify_url}")
+
+        view = FIPControlView(guild_id=guild_id, spotify_url=spotify_url)
+
         if guild_id in live_messages:
             await live_messages[guild_id].edit(
                 content=f"🔄 Switched to FIP {genre} in {channel.name}",
@@ -90,5 +100,8 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
 
     except Exception as e:
         print(f"[Switch Error] {e}")
-        traceback.print_exc()  # Full traceback in console
-        await interaction.response.send_message("Something went wrong.", ephemeral=True)
+        traceback.print_exc()
+        try:
+            await interaction.response.send_message("Something went wrong.", ephemeral=True)
+        except discord.HTTPException as http_error:
+            print(f"[Switch Error] Couldn't send error message: {http_error}")
