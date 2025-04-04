@@ -11,7 +11,7 @@ This lightweight bot streams **Radio France’s FIP stations** directly into a D
 - 🎶 Stream FIP and all its genre stations (Jazz, Rock, Groove, etc.)
 - 🧠 Auto-updating embed with now-playing info (song title, artist, release, year, cover art)
 - 🔗 One-click “Open on Spotify” button (track link is pre-fetched automatically)
-- 📻 Interactive dropdowns and buttons (station switch, volume, info)
+- 📻 Interactive dropdowns and buttons (station switch, volume, stats)
 - 💬 Reuses chat messages to avoid clutter when switching stations
 - 📡 Slash commands for full bot control
 - 🎭 Bot status shows "Listening to Title - Artist"
@@ -70,7 +70,6 @@ DATABASE_URL=postgresql://fipuser:fippass@db:5432/fip
 ## ⚙️ Slash Commands
 
 - `/fip_join [genre]` — Join your VC and start a station (e.g. main, jazz, reggae, etc.)
-- `/fip_info` — Show the current song playing on your selected station
 - `/fip_leave` — Disconnect the bot from the voice channel and delete its message
 
 ## 🖱️ Embedded UI
@@ -79,7 +78,7 @@ Once connected, the bot creates an interactive message in chat with:
 
 - 🎚 Dropdown to switch between stations
 - 🔊 Volume control buttons
-- ℹ️ Info button to re-display now-playing metadata
+- 📊 Stats button — displays the top listeners per station in your server
 - 🎧 **Open on Spotify** button — opens the track link directly!
 
 ## 🧠 Smart Features
@@ -93,24 +92,21 @@ Once connected, the bot creates an interactive message in chat with:
 
 ## 🗂️ File Structure Overview
 
-| File                 | Purpose                                                                  |
-|----------------------|--------------------------------------------------------------------------|
-| `bot.py`             | Entrypoint that starts the bot and registers commands & background tasks |
-| `commands.py`        | Slash command definitions (`/fip_join`, `/fip_leave`, etc.)              |
-| `handlers.py`        | Core logic to switch stations, connect audio, and update embeds/status   |
-| `views.py`           | Discord UI components: dropdown, volume buttons, Spotify button          |
-| `tasks.py`           | Background loops to fetch metadata and update embeds in real time        |
-| `metadata.py`        | Builds rich now-playing embeds from the FIP metadata API + fallback art  |
-| `spotify.py`         | Fetches Spotify track links based on FIP metadata                        |
-| `config.py`          | All shared config, environment vars, FIP stream URLs, and app state      |
-| `requirements.txt`   | Python dependencies                                                      |
-| `Dockerfile`         | Docker image setup                                                       |
-| `docker-compose.yml` | Easy multi-container support (optional)                                  |
-| `.env.example`       | Sample environment file for local development                            |
-
-## 📸 Screenshots
-
-Coming soon!
+| File / Directory                   | Purpose                                                                 |
+|----------------------------------|-------------------------------------------------------------------------|
+| `bot.py`                         | Entrypoint that starts the bot and registers commands & tasks          |
+| `config.py`                      | Global env variables, bot state, and FIP config                        |
+| `app/commands/`                  | Slash command logic                                                    |
+| `app/handlers/`                  | Core logic to switch stations, VC control, bot activity                |
+| `app/embeds/`                    | Embed builders (now playing, stats)                                    |
+| `app/services/`                  | Spotify and MusicBrainz API calls                                      |
+| `app/ui/`                        | Dropdown and button logic (Discord views)                              |
+| `app/tasks/`                     | Background metadata and song embed updaters                            |
+| `app/db/`                        | DB connection and session tracking                                     |
+| `Dockerfile`                     | Docker image definition                                                |
+| `docker-compose.yml`            | Multi-container support with database                                  |
+| `requirements.txt`              | Python dependency list                                                 |
+| `.env.example`                  | Sample env file to copy                                                |
 
 ## 🛠️ Contributing
 

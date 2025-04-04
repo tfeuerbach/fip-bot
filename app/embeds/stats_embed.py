@@ -1,7 +1,7 @@
 # stats.py
 
 import discord
-from db import get_stats
+from app.db.session_store import get_stats
 from table2ascii import table2ascii as t2a, PresetStyle
 
 async def build_stats_embed(guild: discord.Guild) -> discord.Embed:

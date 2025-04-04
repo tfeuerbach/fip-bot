@@ -2,10 +2,10 @@ import discord
 import datetime
 from discord.ext import commands
 from config import BOT_TOKEN, intents, guild_station_map
-from handlers import set_bot
-from tasks import update_station_cache, update_song_embeds
-from commands import setup_commands
-from db import init_db, start_session, end_session
+from app.handlers.station_handler import set_bot
+from app.tasks.song_updater import update_station_cache, update_song_embeds
+from app.commands import setup_commands
+from app.db.session_store import init_db, start_session, end_session
 
 bot = commands.Bot(command_prefix='/', intents=intents)
 
@@ -19,7 +19,7 @@ async def on_ready():
     print(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
     print("------")
     set_bot(bot)
-    
+
     init_db()
     update_station_cache.start()
     update_song_embeds.start()
@@ -32,12 +32,9 @@ async def on_voice_state_update(member, before, after):
     guild_id = str(member.guild.id)
     user_id = str(member.id)
 
-    # Joined the bot's VC
     if after.channel and member.guild.voice_client and after.channel == member.guild.voice_client.channel:
         station = guild_station_map.get(member.guild.id, "main")
         start_session(guild_id, user_id, station, datetime.datetime.utcnow())
-
-    # Left VC or switched away
     elif (before.channel and member.guild.voice_client and before.channel == member.guild.voice_client.channel):
         end_session(guild_id, user_id, datetime.datetime.utcnow())
 

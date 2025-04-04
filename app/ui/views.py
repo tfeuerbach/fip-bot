@@ -2,9 +2,9 @@
 
 import discord
 from config import guild_station_map, station_cache, FIP_STREAMS, guild_volumes
-from metadata import fetch_metadata_embed
-from spotify import fetch_spotify_url
-from stats import build_stats_embed
+from app.embeds.metadata_embed import fetch_metadata_embed
+from app.services.spotify import fetch_spotify_url
+from app.embeds.stats_embed import build_stats_embed
 
 class StationDropdown(discord.ui.Select):
     def __init__(self):
@@ -20,7 +20,7 @@ class StationDropdown(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        from handlers import switch_station  # Delayed import to prevent circular reference
+        from app.handlers.station_handler import switch_station  # Delayed import to prevent circular reference
 
         genre = self.values[0]
         metadata = station_cache.get(genre, {}).get("now", {})

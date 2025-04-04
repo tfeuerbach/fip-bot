@@ -14,9 +14,9 @@ from config import (
     live_messages,
     guild_song_ids
 )
-from metadata import fetch_metadata_embed
-from views import FIPControlView
-from spotify import fetch_spotify_url
+from app.embeds.metadata_embed import fetch_metadata_embed
+from app.ui.views import FIPControlView
+from app.services.spotify import fetch_spotify_url
 
 @tasks.loop(seconds=1)
 async def update_station_cache():
