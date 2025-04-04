@@ -107,6 +107,11 @@ jobs:
         pip install -r requirements.txt
         PYTHONPATH=. python tests/test_spotify.py
 
+    - name: 🧪 Test multi-guild session isolation
+      run: |
+        pip install -r requirements.txt
+        PYTHONPATH=. pytest tests/test_multi_guild_sessions.py
+
     - name: 🧪 Test Metadata Embed Builder
       run: |
         pip install -r requirements.txt
