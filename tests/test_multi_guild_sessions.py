@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta
 from app.db.session_store import start_session, end_session, get_stats
+from app.db import init_db
 
 def test_multi_guild_isolation():
+    init_db()  # 👈 Ensure tables exist before running anything
+
     guilds = [f"guild_{i}" for i in range(1, 6)]
     users = [f"user_{i}" for i in range(1, 6)]
     genres = ["main", "jazz", "rock", "world", "groove"]
@@ -19,4 +22,4 @@ def test_multi_guild_isolation():
         user_id, station, seconds = stats[0]
         assert user_id == users[i]
         assert station == genres[i]
-        assert seconds == 10  # 10 seconds
+        assert seconds == 600  # 10 minutes
