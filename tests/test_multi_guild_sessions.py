@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from app.db.session_store import start_session, end_session, get_stats
-from app.db import init_db
+from app.db.session_store import init_db
 
 def test_multi_guild_isolation():
     init_db()  # 👈 Ensure tables exist before running anything
