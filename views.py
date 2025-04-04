@@ -4,9 +4,8 @@ import discord
 from config import guild_station_map, station_cache, FIP_STREAMS, guild_volumes
 from metadata import fetch_metadata_embed
 from spotify import fetch_spotify_url
-from handlers import switch_station
+from stats import build_stats_embed
 
-# Dropdown menu to let users switch between FIP stations
 class StationDropdown(discord.ui.Select):
     def __init__(self):
         options = [
@@ -21,33 +20,41 @@ class StationDropdown(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        from handlers import switch_station  # Delayed import to prevent circular reference
+
         genre = self.values[0]
         metadata = station_cache.get(genre, {}).get("now", {})
         title = metadata.get("firstLine", {}).get("title", "")
         artist = metadata.get("secondLine", {}).get("title", "")
-        url = await fetch_spotify_url(title, artist)
-        await switch_station(interaction, genre, view=FIPControlView(spotify_url=url))
+        print(f"[Dropdown] Switching to: {genre} | Now playing: {title} - {artist}")
 
-# Main view attached to now-playing message
+        spotify_url = await fetch_spotify_url(title, artist)
+        print(f"[Dropdown] Spotify URL resolved: {spotify_url}")
+
+        view = FIPControlView(guild_id=interaction.guild.id, spotify_url=spotify_url)
+        await switch_station(interaction, genre, view=view)
+
+
 class FIPControlView(discord.ui.View):
-    def __init__(self, spotify_url: str = None):
+    def __init__(self, guild_id: int, spotify_url: str = None):
         super().__init__(timeout=None)
+        self.guild_id = guild_id
+        self.spotify_url = spotify_url or "https://open.spotify.com"
+
         self.add_item(StationDropdown())
 
-        # Spotify link button
-        self.add_item(discord.ui.Button(
+        self.spotify_button = discord.ui.Button(
             label="Open on Spotify",
             style=discord.ButtonStyle.link,
-            url=spotify_url or "https://open.spotify.com"
-        ))
+            url=self.spotify_url
+        )
+        self.add_item(self.spotify_button)
 
-    @discord.ui.button(label="Info", style=discord.ButtonStyle.primary)
-    async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = await fetch_metadata_embed(interaction.guild.id)
-        if embed:
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await interaction.response.send_message("Couldn't fetch song info.", ephemeral=True)
+    @discord.ui.button(label="Stats", style=discord.ButtonStyle.primary)
+    async def stats_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = await build_stats_embed(interaction.guild)
+        await interaction.message.edit(embed=embed, view=StatsView(guild_id=self.guild_id, spotify_url=self.spotify_url))
+        await interaction.response.defer()
 
     @discord.ui.button(label="Volume +", style=discord.ButtonStyle.secondary)
     async def vol_up(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -60,7 +67,7 @@ class FIPControlView(discord.ui.View):
 
             embed = await fetch_metadata_embed(interaction.guild.id)
             if embed and interaction.message:
-                await interaction.message.edit(embed=embed, view=FIPControlView())
+                await interaction.message.edit(embed=embed, view=FIPControlView(guild_id=self.guild_id, spotify_url=self.spotify_url))
             await interaction.response.defer()
 
     @discord.ui.button(label="Volume -", style=discord.ButtonStyle.secondary)
@@ -74,5 +81,19 @@ class FIPControlView(discord.ui.View):
 
             embed = await fetch_metadata_embed(interaction.guild.id)
             if embed and interaction.message:
-                await interaction.message.edit(embed=embed, view=FIPControlView())
+                await interaction.message.edit(embed=embed, view=FIPControlView(guild_id=self.guild_id, spotify_url=self.spotify_url))
             await interaction.response.defer()
+
+
+class StatsView(discord.ui.View):
+    def __init__(self, guild_id: int, spotify_url: str = None):
+        super().__init__(timeout=None)
+        self.guild_id = guild_id
+        self.spotify_url = spotify_url or "https://open.spotify.com"
+
+    @discord.ui.button(label="⬅️ Back", style=discord.ButtonStyle.danger)
+    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = await fetch_metadata_embed(self.guild_id)
+        if embed and interaction.message:
+            await interaction.message.edit(embed=embed, view=FIPControlView(guild_id=self.guild_id, spotify_url=self.spotify_url))
+        await interaction.response.defer()

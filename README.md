@@ -14,6 +14,9 @@ This lightweight bot streams **Radio France’s FIP stations** directly into a D
 - 📻 Interactive dropdowns and buttons (station switch, volume, info)
 - 💬 Reuses chat messages to avoid clutter when switching stations
 - 📡 Slash commands for full bot control
+- 🎭 Bot status shows "Listening to Title - Artist"
+- 🧹 Bot automatically deletes its message when it leaves VC
+- 🎨 Falls back to MusicBrainz for album covers when FIP image fails
 - 🐳 Fully dockerized for self-hosting or production deployment
 
 ## 🚀 Quick Start (Docker)
@@ -37,12 +40,13 @@ docker compose up --build -d
 Create a `.env` file with the following:
 
 ```env
-BOT_TOKEN=your_discord_bot_token
+# Required bot token from Discord Developer Portal
+BOT_TOKEN=your_discord_bot_token_here
+
+# Default encoding: mp3 or ogg
 ENCODING=mp3
 
-SPOTIFY_CLIENT_ID=your_spotify_client_id
-SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
-
+# FIP Stations
 FIP_MAIN=https://icecast.radiofrance.fr/fip-midfi.mp3?id=radiofrance
 FIP_ROCK=https://icecast.radiofrance.fr/fiprock-midfi.mp3?id=radiofrance
 FIP_JAZZ=https://icecast.radiofrance.fr/fipjazz-midfi.mp3?id=radiofrance
@@ -54,13 +58,20 @@ FIP_ELECTRO=https://icecast.radiofrance.fr/fipelectro-midfi.mp3?id=radiofrance
 FIP_HIPHOP=https://icecast.radiofrance.fr/fiphiphop-midfi.mp3?id=radiofrance
 FIP_POP=https://icecast.radiofrance.fr/fippop-midfi.mp3?id=radiofrance
 FIP_METAL=https://icecast.radiofrance.fr/fipmetal-midfi.mp3?id=radiofrance
+
+# Spotify
+SPOTIFY_CLIENT_ID=your_id_here
+SPOTIFY_CLIENT_SECRET=your_secret_here
+
+# Database
+DATABASE_URL=postgresql://fipuser:fippass@db:5432/fip
 ```
 
 ## ⚙️ Slash Commands
 
 - `/fip_join [genre]` — Join your VC and start a station (e.g. main, jazz, reggae, etc.)
 - `/fip_info` — Show the current song playing on your selected station
-- `/fip_leave` — Disconnect the bot from the voice channel
+- `/fip_leave` — Disconnect the bot from the voice channel and delete its message
 
 ## 🖱️ Embedded UI
 
@@ -77,6 +88,8 @@ Once connected, the bot creates an interactive message in chat with:
 - Detects and suppresses metadata updates during talk/interview segments
 - Updates the same chat message when switching stations (no chat spam)
 - Automatically pre-fetches Spotify track ID to generate instant links
+- Falls back to MusicBrainz API to get album artwork when images are unavailable/invalid from radiofrance.fr
+- Displays current song title/artist in bot status (e.g. “Listening to ...”)
 
 ## 🗂️ File Structure Overview
 
@@ -84,10 +97,10 @@ Once connected, the bot creates an interactive message in chat with:
 |----------------------|--------------------------------------------------------------------------|
 | `bot.py`             | Entrypoint that starts the bot and registers commands & background tasks |
 | `commands.py`        | Slash command definitions (`/fip_join`, `/fip_leave`, etc.)              |
-| `handlers.py`        | Core logic to switch stations, connect audio, and update embeds          |
+| `handlers.py`        | Core logic to switch stations, connect audio, and update embeds/status   |
 | `views.py`           | Discord UI components: dropdown, volume buttons, Spotify button          |
 | `tasks.py`           | Background loops to fetch metadata and update embeds in real time        |
-| `metadata.py`        | Builds rich now-playing embeds from the FIP metadata API                 |
+| `metadata.py`        | Builds rich now-playing embeds from the FIP metadata API + fallback art  |
 | `spotify.py`         | Fetches Spotify track links based on FIP metadata                        |
 | `config.py`          | All shared config, environment vars, FIP stream URLs, and app state      |
 | `requirements.txt`   | Python dependencies                                                      |

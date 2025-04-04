@@ -6,5 +6,21 @@ services:
     container_name: agent
     restart: unless-stopped
     env_file: .env
-    ports:
-      - "8081:8080"  # Optional if bot ever runs a web service
+    depends_on:
+      - db
+    volumes:
+      - .:/app
+
+  db:
+    image: postgres:16
+    container_name: fip-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fip
+      POSTGRES_USER: fipuser
+      POSTGRES_PASSWORD: fippass
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
