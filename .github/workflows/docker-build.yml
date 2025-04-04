@@ -23,11 +23,14 @@ jobs:
     - name: 🐳 Build Docker image
       run: docker build -t fip-bot-agent .
 
-    - name: ⬆️ Upload Docker image
+    - name: 📦 Save Docker image as artifact
+      run: docker save fip-bot-agent -o fip-bot-agent.tar
+
+    - name: ⬆️ Upload Docker image artifact
       uses: actions/upload-artifact@v4
       with:
-        name: docker-image
-        path: .
+        name: fip-bot-image
+        path: fip-bot-agent.tar
         retention-days: 1
 
   test:
@@ -71,10 +74,13 @@ jobs:
     - name: 📦 Checkout repository
       uses: actions/checkout@v3
 
-    - name: 🐍 Set up Python
-      uses: actions/setup-python@v4
+    - name: 📥 Download Docker image artifact
+      uses: actions/download-artifact@v4
       with:
-        python-version: '3.10'
+        name: fip-bot-image
+
+    - name: 📦 Load Docker image
+      run: docker load -i fip-bot-agent.tar
 
     - name: 🔍 Dry-run Python bytecode check
       run: |
