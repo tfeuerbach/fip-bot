@@ -1,14 +1,12 @@
-# handlers.py
-
 import asyncio
 import discord
 import datetime
 import traceback
 from config import FIP_STREAMS, player, guild_station_map, live_messages, current_genres
-from metadata import fetch_metadata_embed
-from spotify import fetch_spotify_url
-from views import FIPControlView
-from db import start_session, end_session
+from app.embeds.metadata_embed import fetch_metadata_embed
+from app.services.spotify import fetch_spotify_url
+from app.ui.views import FIPControlView
+from app.db.session_store import start_session, end_session
 
 bot = None
 
