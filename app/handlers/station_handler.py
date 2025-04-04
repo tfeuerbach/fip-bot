@@ -6,7 +6,7 @@ from config import FIP_STREAMS, player, guild_station_map, live_messages, curren
 from app.embeds.metadata_embed import fetch_metadata_embed
 from app.services.spotify import fetch_spotify_url
 from app.ui.views import FIPControlView
-from app.db.session_store import start_session, end_session
+from app.db.session_store import get_station_now_playing, start_session, end_session
 
 bot = None
 
@@ -17,20 +17,19 @@ def set_bot(bot_instance):
 async def switch_station(interaction: discord.Interaction, genre: str, view=None):
     global player
 
+    # ✅ Always defer early to avoid timeouts
+    if not interaction.response.is_done():
+        await interaction.response.defer()
+
     genre = genre.lower()
+
     if genre not in FIP_STREAMS:
-        if not interaction.response.is_done():
-            await interaction.response.send_message("Invalid genre.", ephemeral=True)
+        await interaction.followup.send("Invalid genre.", ephemeral=True)
         return
 
     if not interaction.user.voice or not interaction.user.voice.channel:
-        if not interaction.response.is_done():
-            await interaction.response.send_message("You're not in a voice channel!", ephemeral=True)
+        await interaction.followup.send("You're not in a voice channel!", ephemeral=True)
         return
-
-    # Immediately acknowledge interaction to avoid timeouts
-    if not interaction.response.is_done():
-        await interaction.response.defer()
 
     current_genres.clear()
     current_genres.add(genre)
@@ -57,6 +56,7 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
             player.play(discord.FFmpegPCMAudio(stream_url))
             print("[DEBUG] Connected and started stream.")
 
+        # ⏱ Update sessions for all non-bot users
         for member in channel.members:
             if not member.bot:
                 print(f"[DEBUG] Updating session for user {member.id}")
@@ -80,12 +80,17 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
                 color=discord.Color.blurple()
             )
 
-        title = embed.title.split(" – ")[0] if "–" in embed.title else ""
-        artist = embed.title.split(" – ")[1] if "–" in embed.title else ""
+        row = get_station_now_playing(genre)
+        title = artist = ""
+        if row:
+            _, full_title, *_ = row
+            if " – " in full_title:
+                title, artist = full_title.split(" – ", 1)
+
         spotify_url = await fetch_spotify_url(title, artist)
         print(f"[Switch Station] Fetched Spotify URL: {spotify_url}")
 
-        # ✅ Set bot activity
+        # 🎧 Update bot presence
         if title and artist and bot:
             activity = discord.Activity(type=discord.ActivityType.listening, name=f"{title} - {artist}")
             await bot.change_presence(activity=activity)

@@ -1,5 +1,6 @@
-# tasks.py
+# song_updater.py
 
+import asyncio
 import time
 import aiohttp
 from datetime import datetime
@@ -9,7 +10,6 @@ from config import (
     current_genres,
     next_update_times,
     last_song_ids,
-    station_cache,
     guild_station_map,
     live_messages,
     guild_song_ids
@@ -17,58 +17,81 @@ from config import (
 from app.embeds.metadata_embed import fetch_metadata_embed
 from app.ui.views import FIPControlView
 from app.services.spotify import fetch_spotify_url
+from app.db.session_store import get_station_now_playing, update_now_playing
 
 @tasks.loop(seconds=1)
 async def update_station_cache():
     now = int(time.time())
+
     async with aiohttp.ClientSession() as session:
-        for genre in current_genres:
-            if genre in next_update_times and now < next_update_times[genre]:
-                continue
-
+        for genre, stream in FIP_STREAMS.items():
             try:
-                url = f"https://fip-metadata.fly.dev/api/metadata/{FIP_STREAMS[genre]['metadata']}"
+                row = get_station_now_playing(genre)
+                if not row:
+                    print(f"[Metadata Fetch] No DB row found for {genre}, skipping")
+                    continue
+
+                song_id, full_title, start_time, end_time, _ = row
+
+                if now < end_time:
+                    continue  # ✅ Song still playing, skip fetch
+
+                url = f"https://fip-metadata.fly.dev/api/metadata/{stream['metadata']}"
+                print(f"[Metadata Fetch] {genre} expired. Fetching new metadata...")
+
                 async with session.get(url) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        station_cache[genre] = data
+                    if resp.status != 200:
+                        print(f"[Metadata Fetch Error for {genre}] HTTP {resp.status}")
+                        continue
 
-                        song_id = data.get("now", {}).get("song", {}).get("id")
+                    data = await resp.json()
+                    now_block = data.get("now")
+                    if not now_block:
+                        raise ValueError("Missing 'now' block")
 
-                        if song_id and last_song_ids.get(genre) == song_id:
-                            continue
+                    song = now_block.get("song")
+                    song_id = song.get("id") if song else None
 
-                        last_song_ids[genre] = song_id
-                        start = data["now"].get("startTime")
-                        end = data["now"].get("endTime")
+                    start = now_block.get("startTime")
+                    end = now_block.get("endTime")
+                    if start is None or end is None:
+                        raise ValueError("Missing start or end time")
 
-                        if start and end:
-                            next_update_times[genre] = end + 1
+                    first_line = now_block.get("firstLine", {}).get("title", "")
+                    second_line = now_block.get("secondLine", {}).get("title", "")
+                    full_title = f"{first_line} – {second_line}"
+
+                    visuals = now_block.get("visuals", {})
+                    thumbnail_url = visuals.get("card", {}).get("src") or visuals.get("player", {}).get("src")
+
+                    print(f"[Metadata Update] {genre}: {full_title} ({start} → {end})")
+                    await asyncio.to_thread(update_now_playing, genre, song_id, full_title, start, end, thumbnail_url)
 
             except Exception as e:
-                print(f"[Metadata Fetch Error] {e}")
+                print(f"[Metadata Fetch Error for {genre}] {e}")
+
+from app.db.session_store import get_station_now_playing
 
 @tasks.loop(seconds=1)
 async def update_song_embeds():
     for guild_id, message in list(live_messages.items()):
         genre = guild_station_map.get(guild_id)
-        data = station_cache.get(genre)
-        if not data:
+        row = get_station_now_playing(genre)
+        if not row:
             continue
 
-        song_id = data.get("now", {}).get("song", {}).get("id")
+        song_id, full_title, start_time, end_time, thumbnail_url = row
 
         if not song_id or guild_song_ids.get(guild_id) == song_id:
             continue
 
         print(f"[DEBUG] New song detected for guild {guild_id}, genre {genre}, song ID: {song_id}")
 
-        title = data.get("now", {}).get("firstLine", {}).get("title", "")
-        artist = data.get("now", {}).get("secondLine", {}).get("title", "")
+        title, artist = full_title.split(" – ") if " – " in full_title else ("", "")
 
         spotify_url = await fetch_spotify_url(title, artist)
-
         embed = await fetch_metadata_embed(guild_id)
+
         if embed:
             try:
                 await message.edit(
@@ -80,3 +103,4 @@ async def update_song_embeds():
             except Exception as e:
                 print(f"[Embed Update Error] {e}")
                 live_messages.pop(guild_id, None)
+

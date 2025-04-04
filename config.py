@@ -45,9 +45,6 @@ guild_station_map = {}
 # Maps guild ID to the latest message the bot sent (for editing/updating)
 live_messages = {}
 
-# Stores the most recent metadata per station
-station_cache = {}
-
 # Tracks the last played song ID per guild (to avoid redundant embed updates)
 guild_song_ids = {}
 

@@ -1,7 +1,5 @@
-# views.py
-
 import discord
-from config import guild_station_map, station_cache, FIP_STREAMS, guild_volumes
+from config import guild_station_map, FIP_STREAMS, guild_volumes
 from app.embeds.metadata_embed import fetch_metadata_embed
 from app.services.spotify import fetch_spotify_url
 from app.embeds.stats_embed import build_stats_embed
@@ -20,12 +18,21 @@ class StationDropdown(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        from app.handlers.station_handler import switch_station  # Delayed import to prevent circular reference
+        from app.handlers.station_handler import switch_station
+        from app.db.session_store import get_station_now_playing
+
+        if not interaction.response.is_done():
+            await interaction.response.defer()
 
         genre = self.values[0]
-        metadata = station_cache.get(genre, {}).get("now", {})
-        title = metadata.get("firstLine", {}).get("title", "")
-        artist = metadata.get("secondLine", {}).get("title", "")
+        row = get_station_now_playing(genre)
+
+        title = artist = ""
+        if row and row[1]:  # full_title
+            parts = row[1].split(" – ")
+            if len(parts) == 2:
+                title, artist = parts
+
         print(f"[Dropdown] Switching to: {genre} | Now playing: {title} - {artist}")
 
         spotify_url = await fetch_spotify_url(title, artist)
