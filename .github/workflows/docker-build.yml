@@ -57,6 +57,20 @@ jobs:
     - name: 🔍 Run Python bot with dummy token (dry run)
       run: |
         docker run --rm \
-          --env-file .env \
           -e DATABASE_URL=$DATABASE_URL \
+          -e BOT_TOKEN=$BOT_TOKEN \
+          -e SPOTIFY_CLIENT_ID=$SPOTIFY_CLIENT_ID \
+          -e SPOTIFY_CLIENT_SECRET=$SPOTIFY_CLIENT_SECRET \
+          -e FIP_MAIN=$FIP_MAIN \
+          -e FIP_ROCK=$FIP_ROCK \
+          -e FIP_JAZZ=$FIP_JAZZ \
+          -e FIP_GROOVE=$FIP_GROOVE \
+          -e FIP_WORLD=$FIP_WORLD \
+          -e FIP_NOUVEAUTES=$FIP_NOUVEAUTES \
+          -e FIP_REGGAE=$FIP_REGGAE \
+          -e FIP_ELECTRO=$FIP_ELECTRO \
+          -e FIP_HIPHOP=$FIP_HIPHOP \
+          -e FIP_POP=$FIP_POP \
+          -e FIP_METAL=$FIP_METAL \
           fip-bot-agent python -m py_compile bot.py
+    
