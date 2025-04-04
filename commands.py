@@ -36,6 +36,6 @@ def setup_commands(bot):
             # Clear activity
             await interaction.client.change_presence(activity=None)
 
-            await interaction.response.send_message("Left the voice channel.",, ephemeral=True)
+            await interaction.response.send_message("Left the voice channel.", ephemeral=True)
         else:
             await interaction.response.send_message("I'm not connected to a voice channel.", ephemeral=True)

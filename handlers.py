@@ -10,7 +10,7 @@ from spotify import fetch_spotify_url
 from views import FIPControlView
 from db import start_session, end_session
 
-bot = None  # placeholder for bot reference
+bot = None
 
 def set_bot(bot_instance):
     global bot
@@ -44,7 +44,6 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
 
     print(f"[DEBUG] Starting switch to station: {genre}")
     print(f"[DEBUG] Stream URL: {stream_url}")
-    print(f"[DEBUG] Channel: {channel.name} | Guild: {guild_id}")
 
     vc = interaction.guild.voice_client
     try:

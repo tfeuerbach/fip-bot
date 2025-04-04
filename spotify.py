@@ -5,6 +5,10 @@ import urllib.parse
 import re
 from config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 
+def clean_title(title: str) -> str:
+    # Remove content in parentheses (e.g., (feat. ...), (Live), etc.)
+    return re.sub(r"\s*\(.*?\)", "", title).strip()
+
 # Given a song title and artist, this function queries Spotify's API
 # and returns a direct URL to the matching track (if found).
 async def fetch_spotify_url(title, artist):
