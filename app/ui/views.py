@@ -1,6 +1,6 @@
 import discord
 from config import guild_station_map, FIP_STREAMS, guild_volumes
-from app.embeds.metadata_embed import fetch_metadata_embed
+from app.embeds.metadata_embed import fetch_metadata_embed, build_all_stations_embed
 from app.services.spotify import fetch_spotify_url
 from app.embeds.stats_embed import build_stats_embed
 
@@ -100,7 +100,13 @@ class StatsView(discord.ui.View):
 
     @discord.ui.button(label="⬅️ Back", style=discord.ButtonStyle.danger)
     async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = await fetch_metadata_embed(self.guild_id)
-        if embed and interaction.message:
-            await interaction.message.edit(embed=embed, view=FIPControlView(guild_id=self.guild_id, spotify_url=self.spotify_url))
+        summary_embed = build_all_stations_embed()
+        metadata_embed = await fetch_metadata_embed(self.guild_id)
+
+        if metadata_embed and interaction.message:
+            await interaction.message.edit(
+                embeds=[summary_embed, metadata_embed],
+                view=FIPControlView(guild_id=self.guild_id, spotify_url=self.spotify_url)
+            )
+
         await interaction.response.defer()

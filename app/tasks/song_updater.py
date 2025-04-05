@@ -1,23 +1,19 @@
-# song_updater.py
-
 import asyncio
 import time
 import aiohttp
-from datetime import datetime
 from discord.ext import tasks
 from config import (
     FIP_STREAMS,
-    current_genres,
-    next_update_times,
-    last_song_ids,
     guild_station_map,
     live_messages,
-    guild_song_ids
+    guild_song_ids,
+    station_last_song_ids,
 )
-from app.embeds.metadata_embed import fetch_metadata_embed
+from app.embeds.metadata_embed import fetch_metadata_embed, build_all_stations_embed
 from app.ui.views import FIPControlView
 from app.services.spotify import fetch_spotify_url
 from app.db.session_store import get_station_now_playing, update_now_playing
+from app.handlers.station_handler import bot
 
 @tasks.loop(seconds=1)
 async def update_station_cache():
@@ -34,7 +30,7 @@ async def update_station_cache():
                 song_id, full_title, start_time, end_time, _ = row
 
                 if now < end_time:
-                    continue  # ✅ Song still playing, skip fetch
+                    continue  # Song still playing
 
                 url = f"https://fip-metadata.fly.dev/api/metadata/{stream['metadata']}"
                 print(f"[Metadata Fetch] {genre} expired. Fetching new metadata...")
@@ -67,10 +63,16 @@ async def update_station_cache():
                     print(f"[Metadata Update] {genre}: {full_title} ({start} → {end})")
                     await asyncio.to_thread(update_now_playing, genre, song_id, full_title, start, end, thumbnail_url)
 
+                    # Only refresh if the station's song changed
+                    prev_song_id = station_last_song_ids.get(genre)
+                    station_last_song_ids[genre] = song_id
+
+                    if song_id and song_id != prev_song_id:
+                        print(f"[Station Update Detected] {genre} → summary refresh")
+                        await refresh_simple_embeds()
+
             except Exception as e:
                 print(f"[Metadata Fetch Error for {genre}] {e}")
-
-from app.db.session_store import get_station_now_playing
 
 @tasks.loop(seconds=1)
 async def update_song_embeds():
@@ -80,7 +82,7 @@ async def update_song_embeds():
         if not row:
             continue
 
-        song_id, full_title, start_time, end_time, thumbnail_url = row
+        song_id, full_title, _, _, _ = row
 
         if not song_id or guild_song_ids.get(guild_id) == song_id:
             continue
@@ -90,17 +92,36 @@ async def update_song_embeds():
         title, artist = full_title.split(" – ") if " – " in full_title else ("", "")
 
         spotify_url = await fetch_spotify_url(title, artist)
-        embed = await fetch_metadata_embed(guild_id)
+        metadata_embed = await fetch_metadata_embed(guild_id)
+        summary_embed = build_all_stations_embed()
 
-        if embed:
+        if metadata_embed:
             try:
                 await message.edit(
-                    embed=embed,
+                    embeds=[summary_embed, metadata_embed],
                     view=FIPControlView(guild_id=guild_id, spotify_url=spotify_url)
                 )
+
                 guild_song_ids[guild_id] = song_id
-                print(f"[DEBUG] Updated embed and view for guild {guild_id}")
+                print(f"[DEBUG] Updated embeds for guild {guild_id}")
             except Exception as e:
                 print(f"[Embed Update Error] {e}")
                 live_messages.pop(guild_id, None)
 
+async def refresh_simple_embeds():
+    summary_embed = build_all_stations_embed()
+
+    for guild_id, message in list(live_messages.items()):
+        row = get_station_now_playing(guild_station_map.get(guild_id))
+        if not row:
+            continue
+
+        metadata_embed = await fetch_metadata_embed(guild_id)
+        if not metadata_embed:
+            continue
+
+        try:
+            await message.edit(embeds=[summary_embed, metadata_embed])
+            print(f"[Summary Embed] Refreshed for guild {guild_id}")
+        except Exception as e:
+            print(f"[Summary Embed Error] {e}")

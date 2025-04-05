@@ -14,7 +14,6 @@ This lightweight bot streams **Radio France’s FIP stations** directly into a D
 - 📻 Interactive dropdowns and buttons (station switch, volume, stats)
 - 💬 Reuses chat messages to avoid clutter when switching stations
 - 📡 Slash commands for full bot control
-- 🎭 Bot status shows "Listening to Title - Artist"
 - 🧹 Bot automatically deletes its message when it leaves VC
 - 🎨 Falls back to MusicBrainz for album covers when FIP image fails
 - 🐳 Fully dockerized for self-hosting or production deployment
@@ -88,7 +87,6 @@ Once connected, the bot creates an interactive message in chat with:
 - Updates the same chat message when switching stations (no chat spam)
 - Automatically pre-fetches Spotify track ID to generate instant links
 - Falls back to MusicBrainz API to get album artwork when images are unavailable/invalid from radiofrance.fr
-- Displays current song title/artist in bot status (e.g. “Listening to ...”)
 
 ## 🗂️ File Structure Overview
 
@@ -97,7 +95,7 @@ Once connected, the bot creates an interactive message in chat with:
 | `bot.py`                         | Entrypoint that starts the bot and registers commands & tasks          |
 | `config.py`                      | Global env variables, bot state, and FIP config                        |
 | `app/commands/`                  | Slash command logic                                                    |
-| `app/handlers/`                  | Core logic to switch stations, VC control, bot activity                |
+| `app/handlers/`                  | Core logic to switch stations, VC control                              |
 | `app/embeds/`                    | Embed builders (now playing, stats)                                    |
 | `app/services/`                  | Spotify and MusicBrainz API calls                                      |
 | `app/ui/`                        | Dropdown and button logic (Discord views)                              |

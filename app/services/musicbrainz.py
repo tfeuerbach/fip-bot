@@ -19,7 +19,8 @@ async def fetch_musicbrainz_cover(song_meta: dict):
             data = await resp.json()
             recordings = data.get("recordings", [])
             if not recordings:
-                raise ValueError("No recordings found in MusicBrainz")
+                print("[MusicBrainz] No recordings found, skipping fallback cover.")
+                return None
 
             release_id = recordings[0]["releases"][0]["id"]
 

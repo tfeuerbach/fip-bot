@@ -2,8 +2,8 @@ import asyncio
 import discord
 import datetime
 import traceback
-from config import FIP_STREAMS, player, guild_station_map, live_messages, current_genres
-from app.embeds.metadata_embed import fetch_metadata_embed
+from config import FIP_STREAMS, player, guild_station_map, live_messages, current_genres, station_summary_messages
+from app.embeds.metadata_embed import fetch_metadata_embed, build_all_stations_embed
 from app.services.spotify import fetch_spotify_url
 from app.ui.views import FIPControlView
 from app.db.session_store import get_station_now_playing, start_session, end_session
@@ -82,6 +82,7 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
 
         row = get_station_now_playing(genre)
         title = artist = ""
+        full_title = ""
         if row:
             _, full_title, *_ = row
             if " – " in full_title:
@@ -90,27 +91,24 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
         spotify_url = await fetch_spotify_url(title, artist)
         print(f"[Switch Station] Fetched Spotify URL: {spotify_url}")
 
-        # 🎧 Update bot presence
-        if title and artist and bot:
-            activity = discord.Activity(type=discord.ActivityType.listening, name=f"{title} - {artist}")
-            await bot.change_presence(activity=activity)
-
         view = FIPControlView(guild_id=guild_id, spotify_url=spotify_url)
+        summary_embed = build_all_stations_embed()
 
         if guild_id in live_messages:
             await live_messages[guild_id].edit(
                 content=f"🔄 Switched to FIP {genre} in {channel.name}",
-                embed=embed,
+                embeds=[summary_embed, embed],
                 view=view
             )
             print("[DEBUG] Edited existing message.")
         else:
             await interaction.followup.send(
                 content=f"🎶 Now playing FIP {genre} in {channel.name}",
-                embed=embed,
+                embeds=[summary_embed, embed],
                 view=view
             )
             live_messages[guild_id] = await interaction.original_response()
+            station_summary_messages[guild_id] = live_messages[guild_id]
             print("[DEBUG] Sent new message and stored reference.]")
 
     except Exception as e:

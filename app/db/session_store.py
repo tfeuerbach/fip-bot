@@ -92,6 +92,12 @@ def get_stats(guild_id, limit=50):
         return cur.fetchall()
 
 def update_now_playing(station, song_id, title, start_time, end_time, thumbnail_url):
+    # Title case with better handling (e.g., "in case of fire" -> "In Case of Fire")
+    def title_case(s):
+        return ' – '.join(part.title() for part in s.split(' – '))
+
+    cleaned_title = title_case(title)
+
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute("""
             INSERT INTO station_now_playing (station, song_id, title, start_time, end_time, thumbnail_url)
@@ -103,7 +109,7 @@ def update_now_playing(station, song_id, title, start_time, end_time, thumbnail_
                 start_time = EXCLUDED.start_time,
                 end_time = EXCLUDED.end_time,
                 thumbnail_url = EXCLUDED.thumbnail_url;
-        """, (station, song_id, title, start_time, end_time, thumbnail_url))
+        """, (station, song_id, cleaned_title, start_time, end_time, thumbnail_url))
         conn.commit()
 
 def get_station_now_playing(station):
@@ -152,3 +158,9 @@ async def populate_station_now_playing():
 
             except Exception as e:
                 print(f"[Startup Populate Error for {genre}] {e}")
+
+def get_all_station_now_playing():
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT station, song_id, title, start_time, end_time, thumbnail_url FROM station_now_playing;")
+        rows = cur.fetchall()
+        return {row[0]: row[1:] for row in rows}  # key=station, value=(song_id, title, start_time, end_time, thumbnail)
