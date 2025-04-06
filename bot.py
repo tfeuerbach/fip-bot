@@ -3,7 +3,7 @@ import datetime
 from discord.ext import commands
 from config import BOT_TOKEN, intents, guild_station_map
 from app.handlers.station_handler import set_bot
-from app.tasks.song_updater import update_station_cache, update_song_embeds
+from app.tasks.song_updater import update_station_cache, update_song_embeds, set_song_updater_bot, refresh_old_embeds 
 from app.commands import setup_commands
 from app.db.session_store import init_db, start_session, end_session, populate_station_now_playing
 
@@ -20,6 +20,8 @@ async def on_ready():
     print("------")
 
     set_bot(bot)
+    set_song_updater_bot(bot)
+    
     init_db()
 
     # 🚀 Populate DB before starting tasks
@@ -28,6 +30,8 @@ async def on_ready():
     # 🌀 Start update loops
     update_station_cache.start()
     update_song_embeds.start()
+    
+    print(f"🚀 [on_ready] Background tasks started.")
 
 @bot.event
 async def on_voice_state_update(member, before, after):
