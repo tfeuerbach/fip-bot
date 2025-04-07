@@ -1,1 +1,308 @@
-<h1>FIP Discord Bot</h1><p>Listen to Radio France FIP in your Discord server.</p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FIP Radio Bot</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(145deg, #1e1e2f, #2b2b3e);
+      color: #f4f4f4;
+      scroll-behavior: smooth;
+    }
+
+    section {
+      padding: 60px 20px;
+      transition: opacity 1s ease, transform 1s ease;
+    }
+
+    h1 {
+      font-size: 3em;
+      margin: 20px 0;
+    }
+
+    .logo {
+      width: 100px;
+      margin-bottom: 10px;
+    }
+
+    .fade-in {
+      opacity: 1 !important;
+      transform: translateY(0) !important;
+    }
+
+    .fade-out {
+      opacity: 0 !important;
+      transform: translateY(-20px) !important;
+    }
+
+    #hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      position: relative;
+      z-index: 1;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 20px;
+      margin: 40px 0;
+    }
+
+    .buttons a {
+      background: linear-gradient(to right, #ff2c9c, #ff4fa7);
+      color: #fff;
+      text-decoration: none;
+      padding: 14px 32px;
+      border-radius: 50px;
+      font-size: 1rem;
+      font-weight: 600;
+      box-shadow: 0 4px 14px rgba(255, 44, 156, 0.3);
+      transition: all 0.3s ease-in-out;
+      position: relative;
+    }
+    
+    .buttons a:hover {
+      background: linear-gradient(to right, #ff4fa7, #ff2c9c);
+      transform: translateY(-3px) scale(1.05);
+      box-shadow: 0 6px 20px rgba(255, 44, 156, 0.5);
+    }
+    
+
+    footer {
+      font-size: 0.9em;
+      padding: 40px 0 20px;
+    }
+
+    footer a {
+      color: #bbb;
+      text-decoration: underline;
+    }
+
+    #details {
+      max-width: 800px;
+      margin: 0 auto;
+      opacity: 0;
+      transform: translateY(40px);
+      min-height: 100vh;
+    }
+
+    .features {
+      list-style: none;
+      padding: 0;
+      margin-top: 40px;
+      line-height: 1.6;
+    }
+
+    .features li {
+      margin-bottom: 12px;
+    }
+
+    /* Screenshots Section */
+    .screenshots {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 60px 20px 200px;
+      display: flex;
+      flex-direction: column;
+      gap: 80px;
+      opacity: 0;
+      transform: translateY(40px);
+      transition: opacity 1s ease, transform 1s ease;
+    }
+
+    .screenshot-block {
+      display: flex;
+      align-items: center;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+
+    .screenshot-block .text {
+      flex: 1 1 300px;
+    }
+
+    .screenshot-block .image {
+      flex: 1 1 300px;
+    }
+
+    .screenshot-block img {
+      width: 100%;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .left-text .text {
+      order: 1;
+    }
+
+    .left-text .image {
+      order: 2;
+    }
+
+    .right-text .image {
+      order: 1;
+    }
+
+    .right-text .text {
+      order: 2;
+    }
+
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 2em;
+      }
+
+      .buttons a {
+        width: 90%;
+        text-align: center;
+      }
+
+      .screenshot-block {
+        flex-direction: column;
+        text-align: center;
+      }
+
+      .left-text .text,
+      .right-text .text,
+      .left-text .image,
+      .right-text .image {
+        order: unset;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Hero -->
+  <section id="hero">
+    <img class="logo" src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/FIP_logo_2021.svg/200px-FIP_logo_2021.svg.png" alt="FIP Logo" />
+    <h1>FIP Radio Bot</h1>
+
+    <div class="buttons">
+      <a href="https://github.com/tfeuerbach/fip-bot" target="_blank">GitHub</a>
+      <a href="https://top.gg/bot/YOUR_BOT_ID" target="_blank">Top.gg</a>
+      <a href="https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&scope=bot+applications.commands" target="_blank">Add to Discord</a>
+    </div>
+
+    <footer>
+      Made by <a href="https://www.tfeuerbach.dev">Thomas Feuerbach</a> — <a href="https://www.radiofrance.fr/fip" target="_blank">Radio France FIP</a>
+    </footer>
+  </section>
+
+  <!-- Details -->
+  <section id="details" data-fades="#hero">
+    <h2>🎵 Stream Radio France’s FIP Right From Discord</h2>
+    <p>This lightweight, interactive bot streams all of FIP's genre stations directly into your server’s voice channel — and it’s packed with features:</ps >
+
+    <ul class="features">
+      <li>🎶 Main + Jazz, Rock, Groove, World, Electro, Metal</li>
+      <li>🧠 Auto-updating now playing embed</li>
+      <li>🔗 One-click Spotify link</li>
+      <li>📊 Per-server listening stats</li>
+      <li>🎭 Bot status updates</li>
+      <li>🧼 Self-cleaning on leave</li>
+      <li>🐳 Dockerized setup</li>
+    </ul>
+  </section>
+
+  <!-- Screenshot Section -->
+  <section class="screenshots" id="screenshots" data-fades="#details">
+    <div class="screenshot-block left-text">
+      <div class="text">
+        <h3>Lorem Ipsum Dolor Sit Amet</h3>
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Phasellus at lacus sed est iaculis tempus nec ac sapien.</p>
+      </div>
+      <div class="image">
+        <img src="https://via.placeholder.com/500x300?text=Bot+Screenshot+1" alt="Bot Screenshot 1">
+      </div>
+    </div>
+
+    <div class="screenshot-block right-text">
+      <div class="image">
+        <img src="https://via.placeholder.com/500x300?text=Bot+Screenshot+2" alt="Bot Screenshot 2">
+      </div>
+      <div class="text">
+        <h3>Consectetur Adipiscing Elit</h3>
+        <p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.</p>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // Intersection observer for fade-in / fade-out logic
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        const el = entry.target;
+  
+        el.classList.toggle('fade-in', entry.isIntersecting);
+        el.classList.toggle('fade-out', !entry.isIntersecting);
+  
+        const fadeTargets = el.dataset.fades;
+        if (fadeTargets) {
+          document.querySelectorAll(fadeTargets).forEach(target => {
+            target.classList.toggle('fade-out', entry.isIntersecting);
+          });
+        }
+      });
+    }, { threshold: 0.3 });
+  
+    document.querySelectorAll('section[id]').forEach(section => {
+      observer.observe(section);
+    });
+  
+    // Ripple effect on button click
+    document.querySelectorAll('.buttons a').forEach(button => {
+      button.style.position = 'relative'; // Ensure ripple stays within button
+      button.style.overflow = 'hidden';  // Clip ripple to button bounds
+  
+      button.addEventListener('click', e => {
+        const ripple = document.createElement('span');
+        ripple.classList.add('ripple');
+        ripple.style.left = `${e.offsetX}px`;
+        ripple.style.top = `${e.offsetY}px`;
+        button.appendChild(ripple);
+        setTimeout(() => ripple.remove(), 600);
+      });
+    });
+  </script>
+  
+  <style>
+    .ripple {
+      position: absolute;
+      width: 100px;
+      height: 100px;
+      background: rgba(255, 255, 255, 0.4);
+      border-radius: 50%;
+      transform: scale(0);
+      animation: ripple-effect 0.6s linear;
+      pointer-events: none;
+      z-index: 1;
+    }
+  
+    @keyframes ripple-effect {
+      to {
+        transform: scale(4);
+        opacity: 0;
+      }
+    }
+  </style>
+  
+
+</body>
+</html>
