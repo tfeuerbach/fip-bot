@@ -1,52 +1,75 @@
 import discord
-import aiohttp
 from app.services.musicbrainz import fetch_musicbrainz_cover, is_url_valid
-from config import guild_station_map, station_cache, guild_volumes
-import re
+from app.db.session_store import get_station_now_playing, get_all_station_now_playing
+from config import guild_station_map, guild_volumes, FIP_STREAMS, EMOJIS
 
 async def fetch_metadata_embed(guild_id):
     genre = guild_station_map.get(guild_id, "main")
-    data = station_cache.get(genre)
-    if not data:
+    row = get_station_now_playing(genre)
+
+    if not row:
+        print(f"[Metadata Embed] No metadata found in DB for station: {genre}")
         return None
 
-    try:
-        now_block = data.get("now", {})
-        song = now_block.get("song") or {}
-        visuals = now_block.get("visuals", {})
-        thumb_url = visuals.get("card", {}).get("src") or visuals.get("player", {}).get("src")
+    song_id, full_title, start_time, end_time, thumb_url = row
+    volume = guild_volumes.get(guild_id, 1.0)
 
-        first_line = now_block.get("firstLine", {}).get("title", "")
-        second_line = now_block.get("secondLine", {}).get("title", "")
-        volume = guild_volumes.get(guild_id, 1.0)
+    title = artist = ""
+    if full_title and " – " in full_title:
+        title, artist = full_title.split(" – ", 1)
 
-        # ✅ Validate thumbnail, fallback if 404
-        if thumb_url and not await is_url_valid(thumb_url):
-            print(f"[DEBUG] Primary thumbnail invalid: {thumb_url}")
-            thumb_url = await fetch_musicbrainz_cover(song)
-            print(f"[DEBUG] Fallback image URL from MusicBrainz: {thumb_url}")
+    # Check and validate thumbnail
+    if thumb_url and not await is_url_valid(thumb_url):
+        print(f"[Metadata Embed] Invalid thumbnail URL, falling back: {thumb_url}")
+        thumb_url = await fetch_musicbrainz_cover({"title": title, "artist": artist})
+        print(f"[Metadata Embed] MusicBrainz fallback URL: {thumb_url}")
+        if not thumb_url:
+            thumb_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/FIP_logo_2021.svg/2048px-FIP_logo_2021.svg.png"
+            print("[Metadata Embed] Final fallback thumbnail set to FIP logo.")
 
-        if not song:
-            embed = discord.Embed(
-                title="🔇 No metadata for the song currently playing",
-                description="Talk segment or unavailable metadata.",
-                color=discord.Color.dark_grey()
-            )
-            if thumb_url:
-                embed.set_thumbnail(url=thumb_url)
-            embed.set_footer(text=f"Station: {data['stationName'].upper()} • 🔊 Volume: {volume:.1f}")
-            return embed
-
+    # Handle missing song
+    if not song_id:
         embed = discord.Embed(
-            title=f"{first_line} – {second_line}",
-            description=f"*{song['release']['title']}* ({song['year']})\n[**FIP**](https://www.radiofrance.fr/fip)",
-            color=discord.Color.purple()
+            title=f"{title} – {artist}",
+            description="Talk segment or unavailable metadata.",
+            color=discord.Color.dark_grey()
         )
         if thumb_url:
             embed.set_thumbnail(url=thumb_url)
-        embed.set_footer(text=f"Label: {song['release']['label']} • Station: {data['stationName'].upper()} • 🔊 Volume: {volume:.1f}")
+        embed.set_footer(text=f"Station: {genre.upper()} • 🔊 Volume: {volume:.1f}")
         return embed
 
-    except Exception as e:
-        print(f"[Embed Error] {e}")
-        return None
+    # Build embed
+    embed = discord.Embed(
+        title=f"{title} – {artist}",
+        description=f"[**FIP**](https://www.radiofrance.fr/fip)\nStart: <t:{start_time}:t> • End: <t:{end_time}:t>",
+        color=discord.Color.purple()
+    )
+    if thumb_url:
+        embed.set_thumbnail(url=thumb_url)
+    embed.set_footer(text=f"Station: {genre.upper()} • 🔊 Volume: {volume:.1f}")
+    return embed
+
+STATION_ORDER = list(EMOJIS.keys())
+
+def build_all_stations_embed():
+    embed = discord.Embed(
+        title="📻 FIP Station Summary",
+        color=0x9b59b6
+    )
+
+    now_playing = get_all_station_now_playing()
+    lines = []
+
+    for genre in STATION_ORDER:
+        emoji = EMOJIS[genre]
+        entry = now_playing.get(genre)
+
+        if entry:
+            _, title, *_ = entry
+            lines.append(f"{emoji} **{genre.capitalize()}**\n{title}\n")
+        else:
+            lines.append(f"{emoji} **{genre.capitalize()}**\n_No data available_\n")
+
+    embed.description = "\n".join(lines)
+    return embed

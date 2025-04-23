@@ -1,33 +1,26 @@
+import pytest
 import asyncio
 from app.embeds.metadata_embed import fetch_metadata_embed
-from config import guild_station_map, station_cache
+from app.db.session_store import update_now_playing
+from config import guild_station_map
 
-# Mock some test data (simulating what the background task would populate)
-station_cache["main"] = {
-    "now": {
-        "firstLine": {"title": "Test Song"},
-        "secondLine": {"title": "Test Artist"},
-        "song": {
-            "release": {
-                "title": "Fake Album",
-                "label": "Fake Label"
-            },
-            "year": "2023",
-            "interpreters": ["Test Artist"]
-        },
-        "visuals": {
-            "card": {"src": "https://example.com/fake.jpg"}
-        }
-    },
-    "stationName": "fip"
-}
-guild_station_map[123456789] = "main"  # Simulate a fake guild
+guild_id = 123456789
+station_key = "main"
 
+@pytest.mark.asyncio
 async def test_metadata_embed():
-    embed = await fetch_metadata_embed(123456789)
-    assert embed and embed.title, "Failed to fetch or build metadata embed"
-    print("✅ Embed Title:", embed.title)
-    print("✅ Embed Description:", embed.description)
+    # Simulate station metadata for this guild
+    guild_station_map[guild_id] = station_key
 
-if __name__ == "__main__":
-    asyncio.run(test_metadata_embed())
+    await asyncio.to_thread(update_now_playing,
+        station_key,
+        song_id="fake-song-id",
+        title="Test Song – Test Artist",
+        start_time=1700000000,
+        end_time=1700000300,
+        thumbnail_url="https://example.com/fake.jpg"
+    )
+
+    embed = await fetch_metadata_embed(guild_id)
+    assert embed is not None
+    assert embed.title == "Test Song – Test Artist"

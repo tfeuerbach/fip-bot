@@ -30,6 +30,20 @@ FIP_STREAMS = {
     "metal": {"url": os.getenv("FIP_METAL"), "metadata": "fip_metal"},
 }
 
+EMOJIS = {
+    "main": "🎧",
+    "rock": "🎸",
+    "jazz": "🎷",
+    "groove": "🕺",
+    "world": "🌍",
+    "nouveautes": "🆕",
+    "reggae": "🌿",
+    "electro": "🎛️",
+    "hiphop": "🎤",
+    "pop": "🎶",
+    "metal": "🤘",
+}
+
 # Set up Discord bot intents (controls which events the bot receives)
 intents = discord.Intents.default()
 intents.message_content = True     # Needed to read user messages
@@ -45,23 +59,22 @@ guild_station_map = {}
 # Maps guild ID to the latest message the bot sent (for editing/updating)
 live_messages = {}
 
-# Stores the most recent metadata per station
-station_cache = {}
-
 # Tracks the last played song ID per guild (to avoid redundant embed updates)
 guild_song_ids = {}
 
 # Keeps track of which genres are being played so metadata is fetched accordingly
 current_genres = set()
 
+station_last_song_ids = {}  # station: last known song_id
+
 # Caches "next update" times for each station to avoid unnecessary polling
 next_update_times = {}
 
-# Caches the last seen song ID per station (used to detect changes)
-last_song_ids = {}
-
 # Track current volume per guild (default: 1.0)
 guild_volumes = {}
+
+# Track station summary messages for each guild 
+station_summary_messages = {}
 
 # Cleans up strings by removing quotes and ampersands
 def clean(text):

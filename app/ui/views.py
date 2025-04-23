@@ -1,8 +1,6 @@
-# views.py
-
 import discord
-from config import guild_station_map, station_cache, FIP_STREAMS, guild_volumes
-from app.embeds.metadata_embed import fetch_metadata_embed
+from config import guild_station_map, FIP_STREAMS, guild_volumes
+from app.embeds.metadata_embed import fetch_metadata_embed, build_all_stations_embed
 from app.services.spotify import fetch_spotify_url
 from app.embeds.stats_embed import build_stats_embed
 
@@ -20,12 +18,21 @@ class StationDropdown(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        from app.handlers.station_handler import switch_station  # Delayed import to prevent circular reference
+        from app.handlers.station_handler import switch_station
+        from app.db.session_store import get_station_now_playing
+
+        if not interaction.response.is_done():
+            await interaction.response.defer()
 
         genre = self.values[0]
-        metadata = station_cache.get(genre, {}).get("now", {})
-        title = metadata.get("firstLine", {}).get("title", "")
-        artist = metadata.get("secondLine", {}).get("title", "")
+        row = get_station_now_playing(genre)
+
+        title = artist = ""
+        if row and row[1]:  # full_title
+            parts = row[1].split(" – ")
+            if len(parts) == 2:
+                title, artist = parts
+
         print(f"[Dropdown] Switching to: {genre} | Now playing: {title} - {artist}")
 
         spotify_url = await fetch_spotify_url(title, artist)
@@ -93,7 +100,13 @@ class StatsView(discord.ui.View):
 
     @discord.ui.button(label="⬅️ Back", style=discord.ButtonStyle.danger)
     async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = await fetch_metadata_embed(self.guild_id)
-        if embed and interaction.message:
-            await interaction.message.edit(embed=embed, view=FIPControlView(guild_id=self.guild_id, spotify_url=self.spotify_url))
+        summary_embed = build_all_stations_embed()
+        metadata_embed = await fetch_metadata_embed(self.guild_id)
+
+        if metadata_embed and interaction.message:
+            await interaction.message.edit(
+                embeds=[summary_embed, metadata_embed],
+                view=FIPControlView(guild_id=self.guild_id, spotify_url=self.spotify_url)
+            )
+
         await interaction.response.defer()

@@ -1,36 +1,32 @@
 import aiohttp
 import re
 
-async def fetch_musicbrainz_cover(song):
-    try:
-        title = song['release']['title']
-        artist = song['interpreters'][0]
+async def fetch_musicbrainz_cover(song_meta: dict):
+    title = song_meta.get("title", "")
+    artist = song_meta.get("artist", "")
 
-        async with aiohttp.ClientSession() as session:
-            query_url = (
-                "https://musicbrainz.org/ws/2/release/"
-                f"?query=release:{title} AND artist:{artist}&fmt=json&limit=1"
-            )
-            async with session.get(query_url) as resp:
-                if resp.status != 200:
-                    print(f"[MusicBrainz] Failed query: {resp.status}")
-                    return None
-                data = await resp.json()
-                if 'releases' not in data or not data['releases']:
-                    print("[MusicBrainz] No release found.")
-                    return None
-                mbid = data['releases'][0]['id']
+    if not title or not artist:
+        raise ValueError("Missing title or artist for MusicBrainz fallback")
 
-                coverart_url = f"https://coverartarchive.org/release/{mbid}/front"
-                async with session.get(coverart_url) as image_resp:
-                    if image_resp.status == 200:
-                        return coverart_url
-                    else:
-                        print(f"[Cover Art Archive] No image found for MBID {mbid}")
-                        return None
-    except Exception as e:
-        print(f"[MusicBrainz Error] {e}")
-        return None
+    query = f'recording:"{title}" AND artist:"{artist}"'
+    url = f"https://musicbrainz.org/ws/2/recording/?query={query}&fmt=json&limit=1"
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers={"User-Agent": "fip-bot/1.0"}) as resp:
+            if resp.status != 200:
+                raise Exception(f"MusicBrainz API HTTP {resp.status}")
+
+            data = await resp.json()
+            recordings = data.get("recordings", [])
+            if not recordings:
+                print("[MusicBrainz] No recordings found, skipping fallback cover.")
+                return None
+
+            release_id = recordings[0]["releases"][0]["id"]
+
+        coverart_url = f"https://coverartarchive.org/release/{release_id}/front"
+        return coverart_url
+
 
 async def is_url_valid(url):
     try:
