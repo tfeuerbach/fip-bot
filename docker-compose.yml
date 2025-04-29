@@ -22,6 +22,8 @@ services:
       POSTGRES_DB: fip
       POSTGRES_USER: fipuser
       POSTGRES_PASSWORD: fippass
+    ports:
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 

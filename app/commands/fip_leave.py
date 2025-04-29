@@ -14,8 +14,9 @@ def register_fip_leave(bot):
             guild_station_map.pop(interaction.guild.id, None)
 
             # Delete live embed message
-            msg = live_messages.pop(interaction.guild.id, None)
-            if msg:
+            live_data = live_messages.pop(interaction.guild.id, None)
+            if live_data:
+                msg = live_data["message"] if isinstance(live_data, dict) else live_data
                 try:
                     await msg.delete()
                 except discord.HTTPException as e:

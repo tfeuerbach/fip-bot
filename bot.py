@@ -3,7 +3,7 @@ import datetime
 from discord.ext import commands
 from config import BOT_TOKEN, intents, guild_station_map
 from app.handlers.station_handler import set_bot
-from app.tasks.song_updater import update_station_cache, update_song_embeds, set_song_updater_bot, refresh_old_embeds 
+from app.tasks.song_updater import update_station_cache, update_song_embeds, set_song_updater_bot, refresh_simple_embeds 
 from app.commands import setup_commands
 from app.db.session_store import init_db, start_session, end_session, populate_station_now_playing
 

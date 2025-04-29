@@ -57,6 +57,7 @@ player = None
 guild_station_map = {}
 
 # Maps guild ID to the latest message the bot sent (for editing/updating)
+# Structure: {guild_id: {"message": message, "channel": channel}}
 live_messages = {}
 
 # Tracks the last played song ID per guild (to avoid redundant embed updates)

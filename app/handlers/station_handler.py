@@ -14,10 +14,16 @@ def set_bot(bot_instance):
     global bot
     bot = bot_instance
 
+# 🆕 FFmpeg error callback
+def after_ffmpeg(error):
+    if error:
+        print(f"[FFmpeg Error] {error}")
+    else:
+        print("[FFmpeg] Stream ended or stopped cleanly.")
+
 async def switch_station(interaction: discord.Interaction, genre: str, view=None):
     global player
 
-    # ✅ Always defer early to avoid timeouts
     if not interaction.response.is_done():
         await interaction.response.defer()
 
@@ -44,19 +50,24 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
 
     vc = interaction.guild.voice_client
     try:
+        ffmpeg_audio = discord.FFmpegPCMAudio(
+            stream_url,
+            before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+        )
+
         if vc:
             if vc.channel != channel:
                 await vc.move_to(channel)
             if vc.is_playing():
                 vc.stop()
-            vc.play(discord.FFmpegPCMAudio(stream_url))
+            vc.play(ffmpeg_audio, after=after_ffmpeg)
             print("[DEBUG] Moved and started new stream.")
         else:
             player = await channel.connect()
-            player.play(discord.FFmpegPCMAudio(stream_url))
+            player.play(ffmpeg_audio, after=after_ffmpeg)
             print("[DEBUG] Connected and started stream.")
 
-        # ⏱ Update sessions for all non-bot users
+        # Update sessions
         for member in channel.members:
             if not member.bot:
                 print(f"[DEBUG] Updating session for user {member.id}")
@@ -94,8 +105,12 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
         view = FIPControlView(guild_id=guild_id, spotify_url=spotify_url)
         summary_embed = build_all_stations_embed()
 
-        if guild_id in live_messages:
-            await live_messages[guild_id].edit(
+        # Updated live_messages structure handling
+        msg_data = live_messages.get(guild_id)
+
+        if msg_data:
+            message = msg_data["message"]
+            await message.edit(
                 content=f"🔄 Switched to FIP {genre} in {channel.name}",
                 embeds=[summary_embed, embed],
                 view=view
@@ -107,8 +122,9 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
                 embeds=[summary_embed, embed],
                 view=view
             )
-            live_messages[guild_id] = await interaction.original_response()
-            station_summary_messages[guild_id] = live_messages[guild_id]
+            sent_message = await interaction.original_response()
+            live_messages[guild_id] = {"message": sent_message, "channel": interaction.channel}
+            station_summary_messages[guild_id] = sent_message
             print("[DEBUG] Sent new message and stored reference.]")
 
     except Exception as e:
