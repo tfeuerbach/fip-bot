@@ -2,7 +2,7 @@ import os
 import aiohttp
 import psycopg2
 from psycopg2.extras import execute_values
-from config import FIP_STREAMS
+from config import FIP_STREAMS, normalize_pikapi_url
 import asyncio
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -137,8 +137,11 @@ async def populate_station_now_playing():
                     if not now_block:
                         raise ValueError("Missing 'now' block in metadata")
 
-                    song = now_block.get("song")
-                    song_id = song.get("id") if song else None
+                    # songUuid is the new field; older payloads nested it under song.id.
+                    song_id = (
+                        now_block.get("songUuid")
+                        or (now_block.get("song") or {}).get("id")
+                    )
 
                     start = now_block.get("startTime")
                     end = now_block.get("endTime")
@@ -146,12 +149,15 @@ async def populate_station_now_playing():
                     if start is None or end is None:
                         raise ValueError("Missing start or end time")
 
-                    first_line = now_block.get("firstLine", {}).get("title", "")
-                    second_line = now_block.get("secondLine", {}).get("title", "")
+                    first_line = (now_block.get("firstLine") or {}).get("title", "") or ""
+                    second_line = (now_block.get("secondLine") or {}).get("title", "") or ""
                     full_title = f"{first_line} – {second_line}"
 
-                    visuals = now_block.get("visuals", {})
-                    thumbnail_url = visuals.get("card", {}).get("src") or visuals.get("player", {}).get("src")
+                    visuals = now_block.get("visuals") or {}
+                    thumbnail_url = normalize_pikapi_url(
+                        (visuals.get("card") or {}).get("src")
+                        or (visuals.get("player") or {}).get("src")
+                    )
 
                     print(f"[Startup Populate] {genre}: {full_title} ({start} → {end})")
                     await asyncio.to_thread(update_now_playing, genre, song_id, full_title, start, end, thumbnail_url)
