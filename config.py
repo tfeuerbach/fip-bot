@@ -28,6 +28,7 @@ FIP_STREAMS = {
     "hiphop": {"url": os.getenv("FIP_HIPHOP"), "metadata": "fip_hiphop"},
     "pop": {"url": os.getenv("FIP_POP"), "metadata": "fip_pop"},
     "metal": {"url": os.getenv("FIP_METAL"), "metadata": "fip_metal"},
+    "cultes": {"url": os.getenv("FIP_CULTES"), "metadata": "fip_cultes"},
 }
 
 EMOJIS = {
@@ -42,6 +43,7 @@ EMOJIS = {
     "hiphop": "🎤",
     "pop": "🎶",
     "metal": "🤘",
+    "cultes": "⭐",
 }
 
 # Set up Discord bot intents (controls which events the bot receives)
@@ -80,3 +82,16 @@ station_summary_messages = {}
 # Cleans up strings by removing quotes and ampersands
 def clean(text):
     return text.replace('"', '').replace("'", '').replace("&", ' ').strip()
+
+
+# Radio France's pikapi image endpoint 404s without a size segment.
+# Append one if the URL doesn't already specify a size (e.g. ".../<uuid>/400x400").
+def normalize_pikapi_url(url, size="400x400"):
+    if not url or "/pikapi/images/" not in url:
+        return url
+    tail = url.split("/pikapi/images/", 1)[1].split("?", 1)[0]
+    if "/" in tail.strip("/"):
+        return url
+    base, _, query = url.partition("?")
+    base = base.rstrip("/") + "/" + size
+    return f"{base}?{query}" if query else base

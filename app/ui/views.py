@@ -4,6 +4,31 @@ from app.embeds.metadata_embed import fetch_metadata_embed, build_all_stations_e
 from app.services.spotify import fetch_spotify_url
 from app.embeds.stats_embed import build_stats_embed
 
+
+def _apply_volume(vc: discord.VoiceClient, guild_id: int, new_volume: float) -> bool:
+    """Respawn the ffmpeg source with the new volume baked in. Opus sources can't be re-wrapped live."""
+    from app.handlers.station_handler import (
+        after_ffmpeg,
+        channel_bitrate_kbps,
+        make_ffmpeg_source,
+    )
+
+    genre = guild_station_map.get(guild_id, "main")
+    stream = FIP_STREAMS.get(genre)
+    if not stream or not stream.get("url"):
+        return False
+
+    source = make_ffmpeg_source(
+        stream["url"],
+        volume=new_volume,
+        bitrate=channel_bitrate_kbps(vc.channel),
+    )
+    if vc.is_playing():
+        vc.stop()
+    vc.play(source, after=after_ffmpeg)
+    guild_volumes[guild_id] = new_volume
+    return True
+
 class StationDropdown(discord.ui.Select):
     def __init__(self):
         options = [
@@ -65,31 +90,42 @@ class FIPControlView(discord.ui.View):
 
     @discord.ui.button(label="Volume +", style=discord.ButtonStyle.secondary)
     async def vol_up(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
         vc = interaction.guild.voice_client
-        if vc and hasattr(vc, "source"):
-            current = guild_volumes.get(interaction.guild.id, 1.0)
-            new_volume = min(2.0, current + 0.1)
-            vc.source = discord.PCMVolumeTransformer(vc.source, volume=new_volume)
-            guild_volumes[interaction.guild.id] = new_volume
-
-            embed = await fetch_metadata_embed(interaction.guild.id)
-            if embed and interaction.message:
-                await interaction.message.edit(embed=embed, view=FIPControlView(guild_id=self.guild_id, spotify_url=self.spotify_url))
-            await interaction.response.defer()
+        if not vc or not vc.is_connected():
+            return
+        current = guild_volumes.get(interaction.guild.id, 1.0)
+        new_volume = min(2.0, round(current + 0.1, 2))
+        if not _apply_volume(vc, interaction.guild.id, new_volume):
+            return
+        await self._refresh_embed(interaction)
 
     @discord.ui.button(label="Volume -", style=discord.ButtonStyle.secondary)
     async def vol_down(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
         vc = interaction.guild.voice_client
-        if vc and hasattr(vc, "source"):
-            current = guild_volumes.get(interaction.guild.id, 1.0)
-            new_volume = max(0.1, current - 0.1)
-            vc.source = discord.PCMVolumeTransformer(vc.source, volume=new_volume)
-            guild_volumes[interaction.guild.id] = new_volume
+        if not vc or not vc.is_connected():
+            return
+        current = guild_volumes.get(interaction.guild.id, 1.0)
+        new_volume = max(0.1, round(current - 0.1, 2))
+        if not _apply_volume(vc, interaction.guild.id, new_volume):
+            return
+        await self._refresh_embed(interaction)
 
-            embed = await fetch_metadata_embed(interaction.guild.id)
-            if embed and interaction.message:
-                await interaction.message.edit(embed=embed, view=FIPControlView(guild_id=self.guild_id, spotify_url=self.spotify_url))
-            await interaction.response.defer()
+    async def _refresh_embed(self, interaction: discord.Interaction):
+        if not interaction.message:
+            return
+        metadata_embed = await fetch_metadata_embed(interaction.guild.id)
+        if not metadata_embed:
+            return
+        summary_embed = build_all_stations_embed()
+        try:
+            await interaction.message.edit(
+                embeds=[summary_embed, metadata_embed],
+                view=FIPControlView(guild_id=self.guild_id, spotify_url=self.spotify_url),
+            )
+        except discord.HTTPException as e:
+            print(f"[Volume Refresh] {e}")
 
 
 class StatsView(discord.ui.View):

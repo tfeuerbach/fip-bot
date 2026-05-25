@@ -2,7 +2,8 @@ import asyncio
 import discord
 import datetime
 import traceback
-from config import FIP_STREAMS, player, guild_station_map, live_messages, current_genres, station_summary_messages
+import config
+from config import FIP_STREAMS, guild_station_map, live_messages, current_genres, station_summary_messages, guild_volumes
 from app.embeds.metadata_embed import fetch_metadata_embed, build_all_stations_embed
 from app.services.spotify import fetch_spotify_url
 from app.ui.views import FIPControlView
@@ -10,20 +11,59 @@ from app.db.session_store import get_station_now_playing, start_session, end_ses
 
 bot = None
 
+# Input-side flags for ffmpeg (placed before -i). Aggressive reconnect + read timeout
+# keep long-running icecast sessions alive through transient drops.
+FFMPEG_BEFORE_OPTIONS = (
+    "-reconnect 1 "
+    "-reconnect_streamed 1 "
+    "-reconnect_at_eof 1 "
+    "-reconnect_delay_max 2 "
+    "-rw_timeout 15000000"  # 15s read/write timeout (microseconds)
+)
+
+
 def set_bot(bot_instance):
     global bot
     bot = bot_instance
 
-# 🆕 FFmpeg error callback
+
 def after_ffmpeg(error):
     if error:
         print(f"[FFmpeg Error] {error}")
     else:
         print("[FFmpeg] Stream ended or stopped cleanly.")
 
-async def switch_station(interaction: discord.Interaction, genre: str, view=None):
-    global player
 
+def make_ffmpeg_source(stream_url: str, *, volume: float = 1.0, bitrate: int = 128) -> discord.FFmpegOpusAudio:
+    """Build an Opus source. ffmpeg encodes opus directly so Python doesn't re-encode every frame."""
+    output_opts = []
+    if abs(volume - 1.0) > 1e-3:
+        output_opts.append(f"-filter:a volume={volume:.3f}")
+    return discord.FFmpegOpusAudio(
+        stream_url,
+        bitrate=bitrate,
+        before_options=FFMPEG_BEFORE_OPTIONS,
+        options=" ".join(output_opts) if output_opts else None,
+    )
+
+
+def channel_bitrate_kbps(channel: discord.abc.Connectable, *, default: int = 96) -> int:
+    """Clamp the channel's bitrate to the libopus-friendly range. Falls back to a safe default."""
+    bps = getattr(channel, "bitrate", None) or default * 1000
+    return max(64, min(bps // 1000, 384))
+
+async def wait_voice_ready(voice_client: discord.VoiceClient, *, timeout: float = 15.0) -> None:
+    """Poll until the voice client reports connected; covers post-handshake settle time."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        if voice_client.is_connected():
+            return
+        await asyncio.sleep(0.05)
+    raise discord.ClientException("Voice client did not become ready in time.")
+
+
+async def switch_station(interaction: discord.Interaction, genre: str, view=None):
     if not interaction.response.is_done():
         await interaction.response.defer()
 
@@ -50,30 +90,34 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
 
     vc = interaction.guild.voice_client
     try:
-        ffmpeg_audio = discord.FFmpegPCMAudio(
+        if vc and vc.channel != channel:
+            await vc.move_to(channel)
+            await wait_voice_ready(vc)
+        elif not vc:
+            vc = await channel.connect(timeout=60.0, reconnect=True)
+            await wait_voice_ready(vc)
+
+        config.player = vc
+
+        volume = guild_volumes.get(guild_id, 1.0)
+        ffmpeg_audio = make_ffmpeg_source(
             stream_url,
-            before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+            volume=volume,
+            bitrate=channel_bitrate_kbps(channel),
         )
 
-        if vc:
-            if vc.channel != channel:
-                await vc.move_to(channel)
-            if vc.is_playing():
-                vc.stop()
-            vc.play(ffmpeg_audio, after=after_ffmpeg)
-            print("[DEBUG] Moved and started new stream.")
-        else:
-            player = await channel.connect()
-            player.play(ffmpeg_audio, after=after_ffmpeg)
-            print("[DEBUG] Connected and started stream.")
+        if vc.is_playing():
+            vc.stop()
+        vc.play(ffmpeg_audio, after=after_ffmpeg)
+        print(f"[DEBUG] Playing {genre} at {volume:.1f}x in {channel.name}.")
 
-        # Update sessions
+        # Sessions: refresh listening rows for non-bot members in the channel.
+        now = datetime.datetime.utcnow()
         for member in channel.members:
-            if not member.bot:
-                print(f"[DEBUG] Updating session for user {member.id}")
-                now = datetime.datetime.utcnow()
-                end_session(str(guild_id), str(member.id), now)
-                start_session(str(guild_id), str(member.id), genre, now)
+            if member.bot:
+                continue
+            await asyncio.to_thread(end_session, str(guild_id), str(member.id), now)
+            await asyncio.to_thread(start_session, str(guild_id), str(member.id), genre, now)
 
         embed = None
         for i in range(5):
@@ -91,7 +135,7 @@ async def switch_station(interaction: discord.Interaction, genre: str, view=None
                 color=discord.Color.blurple()
             )
 
-        row = get_station_now_playing(genre)
+        row = await asyncio.to_thread(get_station_now_playing, genre)
         title = artist = ""
         full_title = ""
         if row:
